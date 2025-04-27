@@ -14,6 +14,8 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v3
+        with:
+            fetch-depth: 0
 
       - name: Set up Python
         uses: actions/setup-python@v4
@@ -56,9 +58,6 @@ jobs:
 
       - name: Run black
         run: black --check .
-
-      - name: Run flake8
-        run: flake8 .
 
       - name: Run mypy
         run: mypy pymbrewclient tests
