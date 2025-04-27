@@ -9,8 +9,7 @@ local_scheme = "node-and-date"
 [project]
 name = "pymbrewclient"
 description = "pymbrewclient: A Python library and CLI for readonly access to Minibrew's API"
-readme = "README.md"
-readme-content-type = "text/markdown"
+readme = {file = "README.md", content-type = "text/markdown"}
 requires-python = ">=3.10"
 license = {text = "MIT"}
 authors = [{name = "Stuart Pearson", email = "1926002+stuartp44@users.noreply.github.com"}]
