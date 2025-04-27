@@ -55,7 +55,7 @@ print(brewery_overview)
 from pymbrewclient import pymbrewclient
 
 # Initialize the client
-client = pymbrewclient()
+client = pymbrewclient(username,password)
 
 # Fetch session info
 session_id = 12345
