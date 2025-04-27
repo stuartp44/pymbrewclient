@@ -1,30 +1,30 @@
 # “Commons Clause” License Condition v1.0
-# 
+#
 # The Software is provided to you by the Licensor under the License, as defined below, subject to the following condition.
-# 
+#
 # Without limiting other conditions in the License, the grant of rights under the License will not include, and the License does not grant to you, the right to Sell the Software.
-# 
+#
 # For purposes of the foregoing, “Sell” means practicing any or all of the rights granted to you under the License to provide to third parties, for a fee or other consideration (including without limitation fees for hosting or consulting/ support services related to the Software), a product or service whose value derives, entirely or substantially, from the functionality of the Software. Any license notice or attribution required by the License must also include this Commons Clause License Condition notice.
-# 
+#
 # Software: pymbrewclient
 # License: MIT License
 # Licensor: Stuart Pearson
-# 
-# 
+#
+#
 # MIT License
-# 
+#
 # Copyright (c) 2024 Stuart Pearson
-# 
+#
 # Permission is hereby granted, free of charge, to any person obtaining a copy
 # of this software and associated documentation files (the "Software"), to deal
 # in the Software without restriction, including without limitation the rights
 # to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
 # copies of the Software, and to permit persons to whom the Software is
 # furnished to do so, subject to the following conditions:
-# 
+#
 # The above copyright notice and this permission notice shall be included in all
 # copies or substantial portions of the Software.
-# 
+#
 # THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
 # IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
 # FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
@@ -32,9 +32,8 @@
 # LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
-# 
+#
 # Disclaimer: This software is an independent project and is not affiliated with, endorsed by, or associated with MiniBrew. MiniBrew's trademarks, logos, API, and other intellectual property are owned by MiniBrew and are not included in this software. Users are responsible for complying with MiniBrew's terms of service when using this software.import typer
-from pprint import pprint
 import typer
 from pymbrewclient.rest.client import RestApiClient
 from rich import print as rich_print
@@ -42,12 +41,13 @@ from rich.pretty import Pretty
 from loguru import logger
 import json
 from pydantic import BaseModel
-from typing import Any, Annotated
+from typing import Annotated
 import sys
 
 app = typer.Typer(help="CLI for reading information from the Minibrew Pro Portal.", no_args_is_help=True)
 
 base_url = "https://api.minibrew.io"
+
 
 def initialize_client(base_url: str, username: str, password: str) -> RestApiClient:
     """
@@ -55,7 +55,8 @@ def initialize_client(base_url: str, username: str, password: str) -> RestApiCli
     """
     return RestApiClient(base_url=base_url, username=username, password=password)
 
-def print_output(data: Any, format: str) -> None:
+
+def print_output(data: BaseModel | dict | list, format: str) -> None:
     """Print output in the specified format."""
     if isinstance(data, BaseModel):
         data = data.dict()
@@ -65,15 +66,22 @@ def print_output(data: Any, format: str) -> None:
     else:
         rich_print(Pretty(data))
 
+
 def setup_logging(level: str) -> None:
     """Configure loguru with the specified log level."""
     logger.remove()  # Remove any default handlers
     logger.add(sink=sys.stderr, level=level.upper())  # Add a new handler with the specified level
 
+
 @app.callback()
 def configure(
     logging_level: Annotated[
-        str, typer.Option("--logging-level", help="Set the logging level (DEBUG, INFO, WARNING, ERROR, CRITICAL)", case_sensitive=False)
+        str,
+        typer.Option(
+            "--logging-level",
+            help="Set the logging level (DEBUG, INFO, WARNING, ERROR, CRITICAL)",
+            case_sensitive=False,
+        ),
     ] = "INFO",
 ) -> None:
     """
@@ -81,12 +89,13 @@ def configure(
     """
     setup_logging(logging_level)
 
+
 @app.command()
 def get_token(
     username: str = typer.Option(..., "--username", help="The username for authentication."),
     password: str = typer.Option(..., "--password", help="The password for authentication."),
-    base_url: str = typer.Option(base_url, "--base-url", help="The base URL for the API.")
-):
+    base_url: str = typer.Option(base_url, "--base-url", help="The base URL for the API."),
+) -> None:
     """
     Fetch and display the token.
     """
@@ -100,12 +109,13 @@ def get_token(
         typer.echo(f"Error fetching token: {e}")
         raise typer.Exit(code=1)
 
+
 @app.command()
 def get_brewery_overview(
     username: str = typer.Option(..., "--username", help="The username for authentication."),
     password: str = typer.Option(..., "--password", help="The password for authentication."),
-    base_url: str = typer.Option(base_url, "--base-url", help="The base URL for the API.")
-    ):
+    base_url: str = typer.Option(base_url, "--base-url", help="The base URL for the API."),
+) -> None:
     """
     Fetch and display the brewery overview.
     """
@@ -119,13 +129,16 @@ def get_brewery_overview(
         typer.echo(f"Error fetching brewery overview: {e}")
         raise typer.Exit(code=1)
 
+
 @app.command()
 def get_session_info(
     username: str = typer.Option(..., "--username", help="The username for authentication."),
     password: str = typer.Option(..., "--password", help="The password for authentication."),
     base_url: str = typer.Option(base_url, "--base-url", help="The base URL for the API."),
-    sessionid: int = typer.Option(..., "--sessionid", help="The session ID to fetch information for.", flag_value='https://api.minibrew.io')
-    ):
+    sessionid: int = typer.Option(
+        ..., "--sessionid", help="The session ID to fetch information for.", flag_value="https://api.minibrew.io"
+    ),
+) -> None:
     """
     Fetch and display session information.
     """
@@ -139,12 +152,13 @@ def get_session_info(
         typer.echo(f"Error fetching session info: {e}")
         raise typer.Exit(code=1)
 
+
 @app.command()
 def get_fermenting(
     username: str = typer.Option(..., "--username", help="The username for authentication."),
     password: str = typer.Option(..., "--password", help="The password for authentication."),
-    base_url: str = typer.Option(base_url, "--base-url", help="The base URL for the API.")
-    ):
+    base_url: str = typer.Option(base_url, "--base-url", help="The base URL for the API."),
+) -> None:
     """
     Fetch and display fermenting devices.
     """
@@ -158,12 +172,13 @@ def get_fermenting(
         typer.echo(f"Error fetching fermenting devices: {e}")
         raise typer.Exit(code=1)
 
+
 @app.command()
 def get_serving(
     username: str = typer.Option(..., "--username", help="The username for authentication."),
     password: str = typer.Option(..., "--password", help="The password for authentication."),
-    base_url: str = typer.Option(base_url, "--base-url", help="The base URL for the API.")
-    ):
+    base_url: str = typer.Option(base_url, "--base-url", help="The base URL for the API."),
+) -> None:
     """
     Fetch and display serving devices.
     """
@@ -177,12 +192,13 @@ def get_serving(
         typer.echo(f"Error fetching serving devices: {e}")
         raise typer.Exit(code=1)
 
+
 @app.command()
 def get_brew_clean_idle(
     username: str = typer.Option(..., "--username", help="The username for authentication."),
     password: str = typer.Option(..., "--password", help="The password for authentication."),
-    base_url: str = typer.Option(base_url, "--base-url", help="The base URL for the API.")
-    ):
+    base_url: str = typer.Option(base_url, "--base-url", help="The base URL for the API."),
+) -> None:
     """
     Fetch and display brew clean idle devices.
     """
@@ -195,12 +211,13 @@ def get_brew_clean_idle(
         typer.echo(f"Error fetching brew clean idle devices: {e}")
         raise typer.Exit(code=1)
 
+
 @app.command()
 def get_brew_acid_clean_idle(
     username: str = typer.Option(..., "--username", help="The username for authentication."),
     password: str = typer.Option(..., "--password", help="The password for authentication."),
-    base_url: str = typer.Option(base_url, "--base-url", help="The base URL for the API.")
-    ):
+    base_url: str = typer.Option(base_url, "--base-url", help="The base URL for the API."),
+) -> None:
     """
     Fetch and display brew acid clean idle devices.
     """
@@ -213,12 +230,13 @@ def get_brew_acid_clean_idle(
         typer.echo(f"Error fetching brew acid clean idle devices: {e}")
         raise typer.Exit(code=1)
 
+
 @app.command()
 def get_minibrew_devices(
     username: str = typer.Option(..., "--username", help="The username for authentication."),
     password: str = typer.Option(..., "--password", help="The password for authentication."),
-    base_url: str = typer.Option(base_url, "--base-url", help="The base URL for the API.")
-    ):
+    base_url: str = typer.Option(base_url, "--base-url", help="The base URL for the API."),
+) -> None:
     """
     Fetch and display all devices.
     """
@@ -229,7 +247,11 @@ def get_minibrew_devices(
         all_devices = overview.brew_clean_idle + overview.fermenting + overview.serving + overview.brew_acid_clean_idle
 
         # Only select unique devices and get only uuid, serial_number, title, and software version
-        unique_devices = list({device["uuid"]: device for device in all_devices if "uuid" in device and device["uuid"] is not None}.values())
+        unique_devices = list(
+            {
+                device["uuid"]: device for device in all_devices if "uuid" in device and device["uuid"] is not None
+            }.values()
+        )
 
         selected_data = [
             {
@@ -246,6 +268,7 @@ def get_minibrew_devices(
         logger.error(f"Error fetching all devices: {e}")
         typer.echo(f"Error fetching all devices: {e}")
         raise typer.Exit(code=1)
+
 
 if __name__ == "__main__":
     app()

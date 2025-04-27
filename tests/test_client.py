@@ -1,21 +1,18 @@
 import unittest
 from unittest.mock import patch, MagicMock
 from pymbrewclient.rest.client import RestApiClient
-from pymbrewclient.rest.models import TokenResponse, BreweryOverview, Session, Beer, DeviceDetails
+from pymbrewclient.rest.models import TokenResponse, BreweryOverview, Beer
+
 
 class TestRestApiClient(unittest.TestCase):
-    def setUp(self):
+    def setUp(self) -> None:
         """
         Set up the test environment.
         """
-        self.client = RestApiClient(
-            base_url="https://api.example.com",
-            username="test_user",
-            password="test_password"
-        )
+        self.client = RestApiClient(base_url="https://api.example.com", username="test_user", password="test_password")
 
     @patch("pymbrewclient.rest.client.requests.post")
-    def test_get_token(self, mock_post):
+    def test_get_token(self, mock_post: MagicMock) -> None:
         """
         Test the _get_token method.
         """
@@ -33,7 +30,7 @@ class TestRestApiClient(unittest.TestCase):
 
     @patch("pymbrewclient.rest.client.RestApiClient._get_token")
     @patch("pymbrewclient.rest.client.requests.get")
-    def test_get_brewery_overview(self, mock_get, mock_get_token):
+    def test_get_brewery_overview(self, mock_get: MagicMock, mock_get_token: MagicMock) -> None:
         """
         Test the get_brewery_overview method.
         """
@@ -48,7 +45,7 @@ class TestRestApiClient(unittest.TestCase):
             "brew_clean_idle": [],
             "fermenting": [],
             "serving": [],
-            "brew_acid_clean_idle": []
+            "brew_acid_clean_idle": [],
         }
         mock_response.raise_for_status = MagicMock()
         mock_get.return_value = mock_response
@@ -62,7 +59,7 @@ class TestRestApiClient(unittest.TestCase):
         self.assertEqual(len(overview.fermenting), 0)
 
     @patch("time.time")
-    def test_is_token_valid(self, mock_time):
+    def test_is_token_valid(self, mock_time: MagicMock) -> None:
         """
         Test the _is_token_valid method for both valid and expired tokens.
         """
@@ -82,7 +79,7 @@ class TestRestApiClient(unittest.TestCase):
 
     @patch("pymbrewclient.rest.client.RestApiClient._get_token")
     @patch("time.time")
-    def test_ensure_token(self, mock_time, mock_get_token):
+    def test_ensure_token(self, mock_time: MagicMock, mock_get_token: MagicMock) -> None:
         """
         Test the _ensure_token method to ensure it renews the token when invalid.
         """
@@ -105,7 +102,7 @@ class TestRestApiClient(unittest.TestCase):
 
     @patch("pymbrewclient.rest.client.requests.get")
     @patch("pymbrewclient.rest.client.RestApiClient._ensure_token")
-    def test_get(self, mock_ensure_token, mock_get):
+    def test_get(self, mock_ensure_token: MagicMock, mock_get: MagicMock) -> None:
         """
         Test the get method to ensure it performs a GET request correctly.
         """
@@ -123,15 +120,13 @@ class TestRestApiClient(unittest.TestCase):
         # Assertions
         mock_ensure_token.assert_called_once()
         mock_get.assert_called_once_with(
-            f"{self.client.base_url}/test-endpoint/",
-            headers=self.client.headers,
-            params=params
+            f"{self.client.base_url}/test-endpoint/", headers=self.client.headers, params=params
         )
         self.assertEqual(response.json(), {"key": "value"})
 
     @patch("pymbrewclient.rest.client.requests.get")
     @patch("pymbrewclient.rest.client.RestApiClient._ensure_token")
-    def test_get_session_info(self, mock_ensure_token, mock_get):
+    def test_get_session_info(self, mock_ensure_token: MagicMock, mock_get: MagicMock) -> None:
         """
         Test the get_session_info method.
         """
@@ -141,7 +136,19 @@ class TestRestApiClient(unittest.TestCase):
             "id": 12345,
             "profile": 67890,
             "beer": {"id": 11111, "name": "Mock Beer", "style_name": "Mock Style", "image": None},
-            "device": {"uuid": "mock-uuid-12345", "serial_number": "mock-serial-12345", "current_state": 1, "process_type": 2, "process_state": 3, "user_action": 4, "device_type": 5, "connection_status": 6, "last_time_online": "2023-10-01T12:00:00Z", "software_version": "1.0.0", "custom_name": "Mock Device"},
+            "device": {
+                "uuid": "mock-uuid-12345",
+                "serial_number": "mock-serial-12345",
+                "current_state": 1,
+                "process_type": 2,
+                "process_state": 3,
+                "user_action": 4,
+                "device_type": 5,
+                "connection_status": 6,
+                "last_time_online": "2023-10-01T12:00:00Z",
+                "software_version": "1.0.0",
+                "custom_name": "Mock Device",
+            },
             "status": 1,
             "session_type": 0,
             "pending_command_seq": 98765,
@@ -152,7 +159,7 @@ class TestRestApiClient(unittest.TestCase):
             "brew_timestamp": 1743857868.656157,
             "original_gravity": None,
             "timestamp_original_gravity": None,
-            "is_brewpack": False
+            "is_brewpack": False,
         }
         mock_response.raise_for_status = MagicMock()
         mock_get.return_value = mock_response
@@ -164,9 +171,7 @@ class TestRestApiClient(unittest.TestCase):
         # Assertions
         mock_ensure_token.assert_called_once()
         mock_get.assert_called_once_with(
-            f"{self.client.base_url}/v1/sessions/{session_id}/",
-            params=None,
-            headers=self.client.headers
+            f"{self.client.base_url}/v1/sessions/{session_id}/", params=None, headers=self.client.headers
         )
         # Access the beer field
         beer = session_info.beer
@@ -180,7 +185,7 @@ class TestRestApiClient(unittest.TestCase):
 
     @patch("pymbrewclient.rest.client.requests.get")
     @patch("pymbrewclient.rest.client.RestApiClient._ensure_token")
-    def test_get_brewery_overview_with_data(self, mock_ensure_token, mock_get):
+    def test_get_brewery_overview_with_data(self, mock_ensure_token: MagicMock, mock_get: MagicMock) -> None:
         """
         Test the get_brewery_overview method with non-empty data.
         """
@@ -190,7 +195,7 @@ class TestRestApiClient(unittest.TestCase):
             "brew_clean_idle": [{"uuid": "device-1"}],
             "fermenting": [{"uuid": "device-2"}],
             "serving": [{"uuid": "device-3"}],
-            "brew_acid_clean_idle": [{"uuid": "device-4"}]
+            "brew_acid_clean_idle": [{"uuid": "device-4"}],
         }
         mock_response.raise_for_status = MagicMock()
         mock_get.return_value = mock_response
@@ -201,9 +206,7 @@ class TestRestApiClient(unittest.TestCase):
         # Assertions
         mock_ensure_token.assert_called_once()
         mock_get.assert_called_once_with(
-            f"{self.client.base_url}/v1/breweryoverview/",
-            params=None,
-            headers=self.client.headers
+            f"{self.client.base_url}/v1/breweryoverview/", params=None, headers=self.client.headers
         )
         self.assertIsInstance(overview, BreweryOverview)
         self.assertEqual(len(overview.brew_clean_idle), 1)
@@ -212,7 +215,7 @@ class TestRestApiClient(unittest.TestCase):
         self.assertEqual(len(overview.brew_acid_clean_idle), 1)
 
     @patch("pymbrewclient.rest.client.requests.post")
-    def test_get_token_error(self, mock_post):
+    def test_get_token_error(self, mock_post: MagicMock) -> None:
         """
         Test the _get_token method when the API returns an error.
         """
@@ -226,6 +229,7 @@ class TestRestApiClient(unittest.TestCase):
             self.client._get_token()
         self.assertEqual(str(context.exception), "API error")
         mock_post.assert_called_once()
+
 
 if __name__ == "__main__":
     unittest.main()
