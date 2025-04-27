@@ -45,5 +45,5 @@ __all__ = [
     "BreweryOverview",
     "Session",
     "DeviceDetails",
-    "Beer"
+    "Beer",
 ]
