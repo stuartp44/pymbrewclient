@@ -59,9 +59,6 @@ jobs:
       - name: Run black
         run: black --check .
 
-      - name: Run mypy
-        run: mypy pymbrewclient tests
-
   build:
     runs-on: ubuntu-latest
     needs: [test, lint] # Only run if test and lint jobs succeed

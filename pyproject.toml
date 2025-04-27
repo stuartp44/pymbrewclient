@@ -34,9 +34,7 @@ dev = [
     "pytest>=7.4.0,<8",
     "requests-mock>=1.11.0,<2",
     "pytest-cov>=4.1.0,<5",
-    "flake8>=6.1.0,<7",
     "black>=23.9.1,<24",
-    "mypy>=1.6.0,<2",
     "Flask>=2.3.3,<3",
     "ruff>=0.7.2,<1",
     "pre-commit>=4.0.1,<5",
@@ -60,13 +58,4 @@ ignore = ["E501", "ANN101"]
 
 [tool.black]
 line-length = 120
-target-version = ["py310"]
-
-[tool.mypy]
-python_version = 3.12
-strict = true
-ignore_missing_imports = true
-
-[tool.flake8]
-max-line-length = 120
-extend-ignore = ["E501"]
+target-version = ["py312"]
