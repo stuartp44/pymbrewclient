@@ -34,3 +34,8 @@
 # SOFTWARE.
 #
 # Disclaimer: This software is an independent project and is not affiliated with, endorsed by, or associated with MiniBrew. MiniBrew's trademarks, logos, API, and other intellectual property are owned by MiniBrew and are not included in this software. Users are responsible for complying with MiniBrew's terms of service when using this software.
+from .pymbrewclient import BreweryClient
+
+__all__ = [
+    "BreweryClient",
+]

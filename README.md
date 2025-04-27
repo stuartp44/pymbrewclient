@@ -41,7 +41,7 @@ pymbrewclient session-info --username <USERNAME> --password <PASSWORD> --session
 ### Library Usage
 
 ```python
-from pymbrewclient import pymbrewclient
+from pymbrewclient.client import BreweryClient
 
 # Initialize the client
 client = pymbrewclient(username,password)
@@ -52,7 +52,7 @@ print(brewery_overview)
 ```
 
 ```python
-from pymbrewclient import pymbrewclient
+from pymbrewclient.client import BreweryClient
 
 # Initialize the client
 client = pymbrewclient(username,password)
