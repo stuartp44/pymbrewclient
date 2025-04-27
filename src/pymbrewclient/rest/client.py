@@ -35,14 +35,14 @@
 # 
 # Disclaimer: This software is an independent project and is not affiliated with, endorsed by, or associated with MiniBrew. MiniBrew's trademarks, logos, API, and other intellectual property are owned by MiniBrew and are not included in this software. Users are responsible for complying with MiniBrew's terms of service when using this software.import requests
 
-from typing import Any, Dict, Optional, List
+from typing import Any
 import requests
 import time
 from .models import TokenResponse, ApiResponse, BreweryOverview, Session
 from loguru import logger
 
 class RestApiClient:
-    def __init__(self, username: str, password: str, base_url: str, headers: Optional[Dict[str, str]] = None):
+    def __init__(self, username: str, password: str, base_url: str, headers: dict[str, str] | None = None) -> None:
         """
         Initialize the REST API client for mbrewclient.
 
@@ -102,7 +102,7 @@ class RestApiClient:
         if not self._is_token_valid():
             self._get_token()
 
-    def get(self, endpoint: str, params: Optional[Dict[str, Any]] = None, ensure_token: bool = True) -> ApiResponse:
+    def get(self, endpoint: str, params: dict[str, Any] | None = None, ensure_token: bool = True) -> ApiResponse:
         """
         Perform a GET request.
 
@@ -119,7 +119,7 @@ class RestApiClient:
         response.raise_for_status()
         return response
 
-    def post(self, endpoint: str, data: Optional[Dict[str, Any]] = None, json: Optional[Dict[str, Any]] = None, headers: Optional[Dict[str, Any]] = None) -> requests.Response:
+    def post(self, endpoint: str, data: dict[str, Any] | None = None, json: dict[str, Any] | None = None, headers: dict[str, Any] | None = None) -> requests.Response:
         """
         Perform a POST request.
 

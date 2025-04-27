@@ -34,7 +34,6 @@
 # SOFTWARE.
 # 
 # Disclaimer: This software is an independent project and is not affiliated with, endorsed by, or associated with MiniBrew. MiniBrew's trademarks, logos, API, and other intellectual property are owned by MiniBrew and are not included in this software. Users are responsible for complying with MiniBrew's terms of service when using this software.
-from typing import List, Optional
 from dataclasses import dataclass
 
 @dataclass
@@ -46,34 +45,34 @@ class Device:
     process_type: int
     title: str
     sub_title: str
-    session_id: Optional[int]
+    session_id: int | None
     image: str
-    status_time: Optional[int]
+    status_time: int | None
     stage: str
-    beer_name: Optional[str]
-    recipe_version: Optional[str]
-    beer_style: Optional[str]
+    beer_name: str | None
+    recipe_version: str | None
+    beer_style: str | None
     gravity: str
-    target_temp: Optional[float]
-    current_temp: Optional[float]
+    target_temp: float | None
+    current_temp: float | None
     online: bool
     updating: bool
     needs_acid_cleaning: bool
-    is_starting: Optional[bool]
+    is_starting: bool | None
     software_version: str
 
 @dataclass
 class BreweryOverview:
-    brew_clean_idle: List[Device]
-    fermenting: List[Device]
-    serving: List[Device]
-    brew_acid_clean_idle: List[Device]
+    brew_clean_idle: list[Device]
+    fermenting: list[Device]
+    serving: list[Device]
+    brew_acid_clean_idle: list[Device]
 
 @dataclass
 class Beer:
     id: int
     name: str
-    image: Optional[str]
+    image: str | None
     style_name: str
 
 @dataclass
@@ -108,7 +107,7 @@ class Session:
         original_gravity: float,
         timestamp_original_gravity: float,
         is_brewpack: bool,
-    ):
+    ) -> None:
         self.id = id
         self.profile = profile
         self.beer = Beer(**beer)  # Convert the beer dictionary into a Beer object
@@ -125,7 +124,7 @@ class Session:
         self.timestamp_original_gravity = timestamp_original_gravity
         self.is_brewpack = is_brewpack
     
-    def __repr__(self):
+    def __repr__(self) -> str:
         return (
             f"Session(\n"
             f"  id={self.id},\n"
@@ -153,5 +152,5 @@ class TokenResponse:
 @dataclass
 class ApiResponse:
     status_code: int
-    data: Optional[dict]
-    message: Optional[str]
+    data: dict | None
+    message: str | None

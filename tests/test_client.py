@@ -1,10 +1,10 @@
 import unittest
 from unittest.mock import patch, MagicMock
 from pymbrewclient.rest.client import RestApiClient
-from pymbrewclient.rest.models import TokenResponse, BreweryOverview, Session, Beer, DeviceDetails
+from pymbrewclient.rest.models import TokenResponse, BreweryOverview, Beer
 
 class TestRestApiClient(unittest.TestCase):
-    def setUp(self):
+    def setUp(self) -> None:
         """
         Set up the test environment.
         """
@@ -15,7 +15,7 @@ class TestRestApiClient(unittest.TestCase):
         )
 
     @patch("pymbrewclient.rest.client.requests.post")
-    def test_get_token(self, mock_post):
+    def test_get_token(self, mock_post: MagicMock) -> None:
         """
         Test the _get_token method.
         """
@@ -33,7 +33,7 @@ class TestRestApiClient(unittest.TestCase):
 
     @patch("pymbrewclient.rest.client.RestApiClient._get_token")
     @patch("pymbrewclient.rest.client.requests.get")
-    def test_get_brewery_overview(self, mock_get, mock_get_token):
+    def test_get_brewery_overview(self, mock_get: MagicMock, mock_get_token: MagicMock) -> None:
         """
         Test the get_brewery_overview method.
         """
@@ -62,7 +62,7 @@ class TestRestApiClient(unittest.TestCase):
         self.assertEqual(len(overview.fermenting), 0)
 
     @patch("time.time")
-    def test_is_token_valid(self, mock_time):
+    def test_is_token_valid(self, mock_time: MagicMock) -> None:
         """
         Test the _is_token_valid method for both valid and expired tokens.
         """
@@ -82,7 +82,7 @@ class TestRestApiClient(unittest.TestCase):
 
     @patch("pymbrewclient.rest.client.RestApiClient._get_token")
     @patch("time.time")
-    def test_ensure_token(self, mock_time, mock_get_token):
+    def test_ensure_token(self, mock_time: MagicMock, mock_get_token: MagicMock) -> None:
         """
         Test the _ensure_token method to ensure it renews the token when invalid.
         """
@@ -105,7 +105,7 @@ class TestRestApiClient(unittest.TestCase):
 
     @patch("pymbrewclient.rest.client.requests.get")
     @patch("pymbrewclient.rest.client.RestApiClient._ensure_token")
-    def test_get(self, mock_ensure_token, mock_get):
+    def test_get(self, mock_ensure_token: MagicMock, mock_get: MagicMock) -> None:
         """
         Test the get method to ensure it performs a GET request correctly.
         """
@@ -131,7 +131,7 @@ class TestRestApiClient(unittest.TestCase):
 
     @patch("pymbrewclient.rest.client.requests.get")
     @patch("pymbrewclient.rest.client.RestApiClient._ensure_token")
-    def test_get_session_info(self, mock_ensure_token, mock_get):
+    def test_get_session_info(self, mock_ensure_token: MagicMock, mock_get: MagicMock) -> None:
         """
         Test the get_session_info method.
         """
@@ -180,7 +180,7 @@ class TestRestApiClient(unittest.TestCase):
 
     @patch("pymbrewclient.rest.client.requests.get")
     @patch("pymbrewclient.rest.client.RestApiClient._ensure_token")
-    def test_get_brewery_overview_with_data(self, mock_ensure_token, mock_get):
+    def test_get_brewery_overview_with_data(self, mock_ensure_token: MagicMock, mock_get: MagicMock) -> None:
         """
         Test the get_brewery_overview method with non-empty data.
         """
@@ -212,7 +212,7 @@ class TestRestApiClient(unittest.TestCase):
         self.assertEqual(len(overview.brew_acid_clean_idle), 1)
 
     @patch("pymbrewclient.rest.client.requests.post")
-    def test_get_token_error(self, mock_post):
+    def test_get_token_error(self, mock_post: MagicMock) -> None:
         """
         Test the _get_token method when the API returns an error.
         """

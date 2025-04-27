@@ -35,14 +35,14 @@
 # 
 # Disclaimer: This software is an independent project and is not affiliated with, endorsed by, or associated with MiniBrew. MiniBrew's trademarks, logos, API, and other intellectual property are owned by MiniBrew and are not included in this software. Users are responsible for complying with MiniBrew's terms of service when using this software.from pymbrewclient.rest.client import RestApiClient
 from pymbrewclient.rest.client import RestApiClient
-from pymbrewclient.rest.models import TokenResponse, BreweryOverview, Session, Beer, DeviceDetails
+from pymbrewclient.rest.models import TokenResponse, BreweryOverview, Session
 
 class pymbrewclient:
     """
     A client for interacting with the Minibrew Pro Portal API.
     """
 
-    def __init__(self, username: str, password: str, base_url: str = "https://api.minibrew.io"):
+    def __init__(self, username: str, password: str, base_url: str = "https://api.minibrew.io") -> None:
         """
         Initialize the client with the base URL and user credentials.
 

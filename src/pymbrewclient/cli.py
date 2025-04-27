@@ -34,7 +34,6 @@
 # SOFTWARE.
 # 
 # Disclaimer: This software is an independent project and is not affiliated with, endorsed by, or associated with MiniBrew. MiniBrew's trademarks, logos, API, and other intellectual property are owned by MiniBrew and are not included in this software. Users are responsible for complying with MiniBrew's terms of service when using this software.import typer
-from pprint import pprint
 import typer
 from pymbrewclient.rest.client import RestApiClient
 from rich import print as rich_print
@@ -42,7 +41,7 @@ from rich.pretty import Pretty
 from loguru import logger
 import json
 from pydantic import BaseModel
-from typing import Any, Annotated
+from typing import Annotated
 import sys
 
 app = typer.Typer(help="CLI for reading information from the Minibrew Pro Portal.", no_args_is_help=True)
@@ -55,7 +54,7 @@ def initialize_client(base_url: str, username: str, password: str) -> RestApiCli
     """
     return RestApiClient(base_url=base_url, username=username, password=password)
 
-def print_output(data: Any, format: str) -> None:
+def print_output(data: BaseModel | dict | list, format: str) -> None:
     """Print output in the specified format."""
     if isinstance(data, BaseModel):
         data = data.dict()
@@ -86,7 +85,7 @@ def get_token(
     username: str = typer.Option(..., "--username", help="The username for authentication."),
     password: str = typer.Option(..., "--password", help="The password for authentication."),
     base_url: str = typer.Option(base_url, "--base-url", help="The base URL for the API.")
-):
+) -> None:
     """
     Fetch and display the token.
     """
@@ -105,7 +104,7 @@ def get_brewery_overview(
     username: str = typer.Option(..., "--username", help="The username for authentication."),
     password: str = typer.Option(..., "--password", help="The password for authentication."),
     base_url: str = typer.Option(base_url, "--base-url", help="The base URL for the API.")
-    ):
+    ) -> None:
     """
     Fetch and display the brewery overview.
     """
@@ -125,7 +124,7 @@ def get_session_info(
     password: str = typer.Option(..., "--password", help="The password for authentication."),
     base_url: str = typer.Option(base_url, "--base-url", help="The base URL for the API."),
     sessionid: int = typer.Option(..., "--sessionid", help="The session ID to fetch information for.", flag_value='https://api.minibrew.io')
-    ):
+    ) -> None:
     """
     Fetch and display session information.
     """
@@ -144,7 +143,7 @@ def get_fermenting(
     username: str = typer.Option(..., "--username", help="The username for authentication."),
     password: str = typer.Option(..., "--password", help="The password for authentication."),
     base_url: str = typer.Option(base_url, "--base-url", help="The base URL for the API.")
-    ):
+    ) -> None:
     """
     Fetch and display fermenting devices.
     """
@@ -163,7 +162,7 @@ def get_serving(
     username: str = typer.Option(..., "--username", help="The username for authentication."),
     password: str = typer.Option(..., "--password", help="The password for authentication."),
     base_url: str = typer.Option(base_url, "--base-url", help="The base URL for the API.")
-    ):
+    ) -> None:
     """
     Fetch and display serving devices.
     """
@@ -182,7 +181,7 @@ def get_brew_clean_idle(
     username: str = typer.Option(..., "--username", help="The username for authentication."),
     password: str = typer.Option(..., "--password", help="The password for authentication."),
     base_url: str = typer.Option(base_url, "--base-url", help="The base URL for the API.")
-    ):
+    ) -> None:
     """
     Fetch and display brew clean idle devices.
     """
@@ -200,7 +199,7 @@ def get_brew_acid_clean_idle(
     username: str = typer.Option(..., "--username", help="The username for authentication."),
     password: str = typer.Option(..., "--password", help="The password for authentication."),
     base_url: str = typer.Option(base_url, "--base-url", help="The base URL for the API.")
-    ):
+    ) -> None:
     """
     Fetch and display brew acid clean idle devices.
     """
@@ -218,7 +217,7 @@ def get_minibrew_devices(
     username: str = typer.Option(..., "--username", help="The username for authentication."),
     password: str = typer.Option(..., "--password", help="The password for authentication."),
     base_url: str = typer.Option(base_url, "--base-url", help="The base URL for the API.")
-    ):
+    ) -> None:
     """
     Fetch and display all devices.
     """
