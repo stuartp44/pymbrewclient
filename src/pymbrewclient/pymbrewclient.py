@@ -38,7 +38,7 @@ from pymbrewclient.rest.client import RestApiClient
 from pymbrewclient.rest.models import TokenResponse, BreweryOverview, Session
 
 
-class pymbrewclient:
+class breweryclient:
     """
     A client for interacting with the Minibrew Pro Portal API.
     """
