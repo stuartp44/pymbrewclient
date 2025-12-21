@@ -7,11 +7,11 @@ on:
 jobs:
   check-pr-title:
     runs-on: ubuntu-latest
+    if: github.actor != 'dependabot[bot]'
     permissions:
       pull-requests: write
     steps:
       - name: Check PR title
-        if: github.actor != 'dependabot[bot]'
         uses: amannn/action-semantic-pull-request@v5
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
