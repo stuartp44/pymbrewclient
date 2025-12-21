@@ -36,3 +36,4 @@ jobs:
           validateSingleCommit: false
           ignoreLabels: |
             skip-changelog
+            dependencies
