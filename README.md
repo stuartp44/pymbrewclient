@@ -2,6 +2,14 @@
 
 `pymbrewclient` is a Python library and CLI tool for interacting with Minibrew's API. It provides both programmatic access and a command-line interface for fetching brewery and session information.
 
+## Disclaimer
+
+This project is an independent, community-driven tool and is **not affiliated with, endorsed by, or supported by Minibrew**. It is developed and maintained by independent contributors.
+
+## Requirements
+
+This library will **only work** if you have access to Minibrew's Pro Portal subscription.
+
 ---
 
 ## Features
@@ -10,11 +18,6 @@
 - Retrieve session information.
 - Easy-to-use CLI for quick access.
 - Python library for programmatic integration.
-
----
-
-### PLEASE NOTE
-This library will only work with a valid subscription to the pro portal.
 
 ## Installation
 
