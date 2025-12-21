@@ -12,6 +12,7 @@ The pipeline includes:
 3. **Automated Testing** - Runs on every PR and push
 4. **Automated Releases** - Creates GitHub releases and publishes to PyPI
 5. **Changelog Generation** - Automatically generates CHANGELOG.md
+6. **Dependency Updates** - Dependabot automatically creates PRs for dependency updates
 
 ## Prerequisites
 
@@ -97,6 +98,15 @@ Protect the `main` branch:
 - **Actions**:
   - Validates PR title follows Conventional Commits
   - Blocks merge if title is invalid
+
+#### 4. **Dependabot** ([.github/dependabot.yml](.github/dependabot.yml))
+- **Trigger**: Weekly on Mondays at 09:00 UTC
+- **Actions**:
+  - Checks for Python dependency updates (pip)
+  - Checks for GitHub Actions version updates
+  - Creates PRs with `chore(deps):` prefix (semantic commit format)
+  - Groups minor and patch updates for production and development dependencies
+  - Limits to 5 PRs for Python deps and 3 for GitHub Actions
 
 ### Commit Message Format
 
@@ -200,6 +210,7 @@ The pipeline consists of:
 
 - **Configuration:**
   - [.releaserc.json](.releaserc.json) - Semantic release config
+  - [.github/dependabot.yml](.github/dependabot.yml) - Dependabot config for automated dependency updates
   - [.github/COMMIT_CONVENTION.md](.github/COMMIT_CONVENTION.md) - Commit guidelines
   - [.github/PULL_REQUEST_TEMPLATE.md](.github/PULL_REQUEST_TEMPLATE.md) - PR template
 
