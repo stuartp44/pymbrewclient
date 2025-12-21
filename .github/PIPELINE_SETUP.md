@@ -30,7 +30,7 @@ The project uses PyPI's Trusted Publishers (OIDC) for secure publishing without 
    - **PyPI Project Name**: `pymbrewclient`
    - **Owner**: `stuartp44`
    - **Repository name**: `pymbrewclient`
-   - **Workflow name**: `semantic-release.yml`
+   - **Workflow name**: `test-and-release.yml`
    - **Environment name**: Leave empty (not using environments)
 
 **Alternative (using API token):**
@@ -38,7 +38,7 @@ The project uses PyPI's Trusted Publishers (OIDC) for secure publishing without 
 If you prefer using an API token:
 1. Generate a PyPI API token
 2. Add it as a GitHub secret named `PYPI_API_TOKEN`
-3. Update [.github/workflows/semantic-release.yml](.github/workflows/semantic-release.yml):
+3. Update [.github/workflows/test-and-release.yml](.github/workflows/test-and-release.yml):
    ```yaml
    - name: Publish to PyPI
      if: env.NEW_VERSION != ''
@@ -81,30 +81,22 @@ Protect the `main` branch:
   - Adds special message for first-time contributors
   - Adds labels: `needs-review`, `first-time-contributor`
 
-#### 2. **Test and Build** ([.github/workflows/test-and-release.yml](.github/workflows/test-and-release.yml))
+#### 2. **Test, Build and Release** ([.github/workflows/test-and-release.yml](.github/workflows/test-and-release.yml))
 - **Trigger**: On every PR and push to main
 - **Actions**:
-  - Runs pytest with coverage
-  - Runs linting (ruff, black)
-  - Builds the package
-  - Validates the build with twine
+  - **Always runs**: Tests (pytest with coverage), linting (ruff, black), and package build
+  - **Only on main branch push**: After all validations pass, runs semantic release to:
+    - Analyze commits since last release
+    - Determine next version number
+    - Generate CHANGELOG.md
+    - Create Git tag and GitHub release
+    - Publish to PyPI
 
 #### 3. **Semantic PR Title Check** ([.github/workflows/semantic-pr.yml](.github/workflows/semantic-pr.yml))
 - **Trigger**: When PR is opened/updated
 - **Actions**:
   - Validates PR title follows Conventional Commits
   - Blocks merge if title is invalid
-
-#### 4. **Semantic Release** ([.github/workflows/semantic-release.yml](.github/workflows/semantic-release.yml))
-- **Trigger**: When commits are pushed to `main`
-- **Actions**:
-  - Analyzes commits since last release
-  - Determines next version number
-  - Generates CHANGELOG.md
-  - Creates Git tag
-  - Creates GitHub release with notes
-  - Builds Python package
-  - Publishes to PyPI
 
 ### Commit Message Format
 
@@ -139,13 +131,15 @@ See [.github/COMMIT_CONVENTION.md](.github/COMMIT_CONVENTION.md) for details.
 
 ### Automatic Releases
 
-Releases happen automatically when commits are merged to `main`:
+Releases happen automatically when commits are merged to `main`, but only after all tests, linting, and build validations pass:
 
 1. **Make changes** in a feature branch
 2. **Create PR** with semantic title (e.g., `feat: add new feature`)
-3. **Get approval** from maintainer
-4. **Merge to main**
-5. **Semantic Release workflow runs** and:
+3. **Tests run** on the PR to validate changes
+4. **Get approval** from maintainer
+5. **Merge to main**
+6. **Validations run again** (test, lint, build)
+7. **Release job runs** (only if all validations pass) and:
    - Analyzes commits
    - Bumps version
    - Updates CHANGELOG.md
@@ -154,9 +148,9 @@ Releases happen automatically when commits are merged to `main`:
 
 ### Manual Release (if needed)
 
-You can trigger a release manually:
+You can trigger the workflow manually:
 
-1. Go to **Actions** → **Semantic Release**
+1. Go to **Actions** → **Test, Build and Release**
 2. Click **Run workflow**
 3. Select `main` branch
 4. Click **Run workflow**
@@ -201,9 +195,8 @@ The pipeline consists of:
 
 - **Workflows:**
   - [.github/workflows/pr-acknowledgment.yml](.github/workflows/pr-acknowledgment.yml) - PR welcome bot
-  - [.github/workflows/semantic-release.yml](.github/workflows/semantic-release.yml) - Automated releases
+  - [.github/workflows/test-and-release.yml](.github/workflows/test-and-release.yml) - Testing, building, and automated releases
   - [.github/workflows/semantic-pr.yml](.github/workflows/semantic-pr.yml) - PR title validation
-  - [.github/workflows/test-and-release.yml](.github/workflows/test-and-release.yml) - Testing & building
 
 - **Configuration:**
   - [.releaserc.json](.releaserc.json) - Semantic release config
