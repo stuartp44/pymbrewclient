@@ -53,8 +53,10 @@ addopts = "--cov=pymbrewclient --cov-report=term-missing --cov-report=xml"
 
 [tool.ruff]
 line-length = 120
+
+[tool.ruff.lint]
 select = ["E", "F", "ANN", "UP"]
-ignore = ["E501", "ANN101"]
+ignore = ["E501"]
 
 [tool.black]
 line-length = 120
