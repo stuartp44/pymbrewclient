@@ -148,9 +148,15 @@ class RestApiClient:
         :param json: Optional JSON data to send in the body.
         :return: The response object.
         """
-        safe_data = self._mask_sensitive_payload(data)
-        safe_json = self._mask_sensitive_payload(json)
-        logger.debug(f"POST request to {endpoint} with data: {safe_data}, json: {safe_json}")
+        if logger.is_enabled("DEBUG"):
+            safe_data = self._mask_sensitive_payload(data)
+            safe_json = self._mask_sensitive_payload(json)
+            logger.debug(
+                "POST request to {} with data: {}, json: {}",
+                endpoint,
+                safe_data,
+                safe_json,
+            )
         url = f"{self.base_url}/{endpoint}/"
         response = requests.post(url, headers=headers, data=data, json=json)
         response.raise_for_status()
