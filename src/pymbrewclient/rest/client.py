@@ -81,19 +81,6 @@ class RestApiClient:
 
         return TokenResponse(token=self.token, exp=data["exp"])
 
-    @staticmethod
-    def _mask_sensitive_payload(payload: dict[str, Any] | None) -> dict[str, Any] | None:
-        if not payload:
-            return payload
-        sensitive_keys = {"password", "pass", "passwd", "token", "authorization", "auth", "secret"}
-        masked: dict[str, Any] = {}
-        for key, value in payload.items():
-            if key.lower() in sensitive_keys:
-                masked[key] = "***"
-            else:
-                masked[key] = value
-        return masked
-
     def _is_token_valid(self) -> bool:
         """
         Check if the current token is still valid.
@@ -148,9 +135,7 @@ class RestApiClient:
         :param json: Optional JSON data to send in the body.
         :return: The response object.
         """
-        safe_data = self._mask_sensitive_payload(data)
-        safe_json = self._mask_sensitive_payload(json)
-        logger.debug(f"POST request to {endpoint} with data: {safe_data}, json: {safe_json}")
+        logger.debug(f"POST request to {endpoint} with data: {data}, json: {json}")
         url = f"{self.base_url}/{endpoint}/"
         response = requests.post(url, headers=headers, data=data, json=json)
         response.raise_for_status()
