@@ -75,7 +75,7 @@ class BreweryOverview:
     def __post_init__(self) -> None:
         """Convert device dictionaries to Device objects with defensive field filtering."""
         _DEVICE_FIELDS = set(inspect.signature(Device).parameters)
-        
+
         def _convert_devices(devices: list) -> list[Device]:
             """Convert a list of device dictionaries to Device objects, filtering unknown keys."""
             if not devices:
@@ -87,7 +87,7 @@ class BreweryOverview:
                 else:
                     result.append(device)
             return result
-        
+
         self.brew_clean_idle = _convert_devices(self.brew_clean_idle)
         self.fermenting = _convert_devices(self.fermenting)
         self.serving = _convert_devices(self.serving)
