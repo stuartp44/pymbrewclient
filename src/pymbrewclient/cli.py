@@ -246,20 +246,20 @@ def get_minibrew_devices(
         overview = client.get_brewery_overview()
         all_devices = overview.brew_clean_idle + overview.fermenting + overview.serving + overview.brew_acid_clean_idle
 
-        # Only select unique devices and get only uuid, serial_number, title, and software version
+        # Only select unique devices
         unique_devices = list(
             {
-                device["uuid"]: device for device in all_devices if "uuid" in device and device["uuid"] is not None
+                device.uuid: device for device in all_devices if device.uuid is not None
             }.values()
         )
 
         selected_data = [
             {
-                "Serial Number": device["serial_number"],
-                "Nickname": device["title"],
-                "Version": device["software_version"],
-                "Is online": device["online"],
-                "Stage": device["stage"],
+                "Serial Number": device.serial_number,
+                "Nickname": device.title,
+                "Version": device.software_version,
+                "Is online": device.online,
+                "Stage": device.stage,
             }
             for device in unique_devices
         ]

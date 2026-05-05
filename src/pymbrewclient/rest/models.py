@@ -34,6 +34,7 @@
 # SOFTWARE.
 #
 # Disclaimer: This software is an independent project and is not affiliated with, endorsed by, or associated with MiniBrew. MiniBrew's trademarks, logos, API, and other intellectual property are owned by MiniBrew and are not included in this software. Users are responsible for complying with MiniBrew's terms of service when using this software.
+import inspect
 from dataclasses import dataclass
 
 
@@ -53,6 +54,7 @@ class Device:
     beer_name: str | None
     recipe_version: str | None
     beer_style: str | None
+    beer_srm: str | None
     gravity: str
     target_temp: float | None
     current_temp: float | None
@@ -69,6 +71,27 @@ class BreweryOverview:
     fermenting: list[Device]
     serving: list[Device]
     brew_acid_clean_idle: list[Device]
+
+    def __post_init__(self) -> None:
+        """Convert device dictionaries to Device objects with defensive field filtering."""
+        _DEVICE_FIELDS = set(inspect.signature(Device).parameters)
+        
+        def _convert_devices(devices: list) -> list[Device]:
+            """Convert a list of device dictionaries to Device objects, filtering unknown keys."""
+            if not devices:
+                return []
+            result = []
+            for device in devices:
+                if isinstance(device, dict):
+                    result.append(Device(**{k: v for k, v in device.items() if k in _DEVICE_FIELDS}))
+                else:
+                    result.append(device)
+            return result
+        
+        self.brew_clean_idle = _convert_devices(self.brew_clean_idle)
+        self.fermenting = _convert_devices(self.fermenting)
+        self.serving = _convert_devices(self.serving)
+        self.brew_acid_clean_idle = _convert_devices(self.brew_acid_clean_idle)
 
 
 @dataclass
