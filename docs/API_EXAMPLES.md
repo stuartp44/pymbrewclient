@@ -26,6 +26,7 @@ The `get_brewery_overview()` method returns the current status of all devices in
             "beer_name": null,
             "recipe_version": null,
             "beer_style": null,
+            "beer_srm": null,
             "gravity": "1.00",
             "target_temp": null,
             "current_temp": null,
@@ -52,6 +53,7 @@ The `get_brewery_overview()` method returns the current status of all devices in
             "beer_name": "Example Beer",
             "recipe_version": "1",
             "beer_style": "Example Style",
+            "beer_srm": "12",
             "gravity": "1.00",
             "target_temp": 14.91,
             "current_temp": 15.1,
@@ -96,6 +98,7 @@ The response is organized into different categories based on device state:
 | `beer_name` | string/null | Name of beer being brewed/fermented |
 | `recipe_version` | string/null | Recipe version number |
 | `beer_style` | string/null | Style of beer |
+| `beer_srm` | string/null | Beer color value (SRM - Standard Reference Method) |
 | `gravity` | string | Current specific gravity reading |
 | `target_temp` | float/null | Target temperature in Celsius |
 | `current_temp` | float/null | Current temperature in Celsius |

@@ -189,13 +189,39 @@ class TestRestApiClient(unittest.TestCase):
         """
         Test the get_brewery_overview method with non-empty data.
         """
-        # Mock the response from requests.get
+        # Mock the response from requests.get with complete device data
+        mock_device = {
+            "uuid": "test-uuid-1",
+            "serial_number": "SN12345",
+            "device_type": 0,
+            "user_action": 0,
+            "process_type": 0,
+            "title": "Test Device",
+            "sub_title": "Connected",
+            "session_id": None,
+            "image": "https://example.com/device.png",
+            "status_time": None,
+            "stage": "Idle",
+            "beer_name": None,
+            "recipe_version": None,
+            "beer_style": None,
+            "beer_srm": None,
+            "gravity": "1.00",
+            "target_temp": None,
+            "current_temp": None,
+            "online": True,
+            "updating": False,
+            "needs_acid_cleaning": False,
+            "is_starting": None,
+            "software_version": "1.0.0",
+        }
+
         mock_response = MagicMock()
         mock_response.json.return_value = {
-            "brew_clean_idle": [{"uuid": "device-1"}],
-            "fermenting": [{"uuid": "device-2"}],
-            "serving": [{"uuid": "device-3"}],
-            "brew_acid_clean_idle": [{"uuid": "device-4"}],
+            "brew_clean_idle": [mock_device],
+            "fermenting": [],
+            "serving": [],
+            "brew_acid_clean_idle": [],
         }
         mock_response.raise_for_status = MagicMock()
         mock_get.return_value = mock_response
@@ -210,9 +236,12 @@ class TestRestApiClient(unittest.TestCase):
         )
         self.assertIsInstance(overview, BreweryOverview)
         self.assertEqual(len(overview.brew_clean_idle), 1)
-        self.assertEqual(len(overview.fermenting), 1)
-        self.assertEqual(len(overview.serving), 1)
-        self.assertEqual(len(overview.brew_acid_clean_idle), 1)
+        self.assertEqual(len(overview.fermenting), 0)
+        self.assertEqual(len(overview.serving), 0)
+        self.assertEqual(len(overview.brew_acid_clean_idle), 0)
+        # Verify the device is properly converted to a Device object
+        self.assertEqual(overview.brew_clean_idle[0].uuid, "test-uuid-1")
+        self.assertEqual(overview.brew_clean_idle[0].serial_number, "SN12345")
 
     @patch("pymbrewclient.rest.client.requests.post")
     def test_get_token_error(self, mock_post: MagicMock) -> None:
@@ -229,6 +258,61 @@ class TestRestApiClient(unittest.TestCase):
             self.client._get_token()
         self.assertEqual(str(context.exception), "API error")
         mock_post.assert_called_once()
+
+    @patch("pymbrewclient.rest.client.requests.get")
+    @patch("pymbrewclient.rest.client.RestApiClient._ensure_token")
+    def test_get_brewery_overview_with_unknown_fields(self, mock_ensure_token: MagicMock, mock_get: MagicMock) -> None:
+        """
+        Test that unknown API fields are silently filtered and don't break the client.
+        """
+        # Mock device with known fields plus unknown future fields
+        mock_device = {
+            "uuid": "test-uuid-1",
+            "serial_number": "SN12345",
+            "device_type": 0,
+            "user_action": 0,
+            "process_type": 0,
+            "title": "Test Device",
+            "sub_title": "Connected",
+            "session_id": None,
+            "image": "https://example.com/device.png",
+            "status_time": None,
+            "stage": "Idle",
+            "beer_name": None,
+            "recipe_version": None,
+            "beer_style": None,
+            "beer_srm": None,
+            "gravity": "1.00",
+            "target_temp": None,
+            "current_temp": None,
+            "online": True,
+            "updating": False,
+            "needs_acid_cleaning": False,
+            "is_starting": None,
+            "software_version": "1.0.0",
+            # Unknown future fields that should be filtered out
+            "unknown_field_1": "value1",
+            "future_feature": 42,
+        }
+
+        mock_response = MagicMock()
+        mock_response.json.return_value = {
+            "brew_clean_idle": [mock_device],
+            "fermenting": [],
+            "serving": [],
+            "brew_acid_clean_idle": [],
+        }
+        mock_response.raise_for_status = MagicMock()
+        mock_get.return_value = mock_response
+
+        # Call the method - should not raise an exception
+        overview = self.client.get_brewery_overview()
+
+        # Verify the device is properly converted despite unknown fields
+        self.assertIsInstance(overview, BreweryOverview)
+        self.assertEqual(len(overview.brew_clean_idle), 1)
+        self.assertEqual(overview.brew_clean_idle[0].uuid, "test-uuid-1")
+        self.assertEqual(overview.brew_clean_idle[0].beer_srm, None)
 
 
 if __name__ == "__main__":
