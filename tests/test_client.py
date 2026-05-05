@@ -215,7 +215,7 @@ class TestRestApiClient(unittest.TestCase):
             "is_starting": None,
             "software_version": "1.0.0",
         }
-        
+
         mock_response = MagicMock()
         mock_response.json.return_value = {
             "brew_clean_idle": [mock_device],
@@ -294,7 +294,7 @@ class TestRestApiClient(unittest.TestCase):
             "unknown_field_1": "value1",
             "future_feature": 42,
         }
-        
+
         mock_response = MagicMock()
         mock_response.json.return_value = {
             "brew_clean_idle": [mock_device],
