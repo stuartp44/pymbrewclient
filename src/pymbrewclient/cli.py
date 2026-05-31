@@ -46,7 +46,6 @@ from rich.pretty import Pretty
 
 from pymbrewclient.rest.client import RestApiClient
 
-
 logger = logging.getLogger(__name__)
 
 app = typer.Typer(help="CLI for reading information from the Minibrew Pro Portal.", no_args_is_help=True)

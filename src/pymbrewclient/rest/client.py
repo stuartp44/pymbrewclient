@@ -43,7 +43,6 @@ import requests
 
 from .models import ApiResponse, BreweryOverview, Session, TokenResponse
 
-
 logger = logging.getLogger(__name__)
 
 
