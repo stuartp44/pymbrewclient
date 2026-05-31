@@ -1,5 +1,7 @@
+import io
+import logging
 import unittest
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock, patch
 from pymbrewclient.rest.client import RestApiClient
 from pymbrewclient.rest.models import TokenResponse, BreweryOverview, Beer
 
@@ -27,6 +29,59 @@ class TestRestApiClient(unittest.TestCase):
         self.assertEqual(token_response.token, "mock_token")
         self.assertGreater(self.client.token_expiry, 0)
         self.assertEqual(self.client.headers["Authorization"], "Bearer mock_token")
+
+    def test_debug_logging_is_silent_by_default(self) -> None:
+        """Debug logging should not emit anything unless the host configures it."""
+        library_logger = logging.getLogger("pymbrewclient.rest.client")
+        root_logger = logging.getLogger()
+
+        original_logger_level = library_logger.level
+        original_root_level = root_logger.level
+        original_root_handlers = root_logger.handlers[:]
+
+        stream = io.StringIO()
+        handler = logging.StreamHandler(stream)
+
+        try:
+            library_logger.setLevel(logging.NOTSET)
+            root_logger.handlers = [handler]
+            root_logger.setLevel(logging.WARNING)
+
+            self.client.token = None
+            self.client._is_token_valid()
+
+            self.assertEqual(stream.getvalue(), "")
+        finally:
+            root_logger.handlers = original_root_handlers
+            root_logger.setLevel(original_root_level)
+            library_logger.setLevel(original_logger_level)
+
+    def test_debug_logging_follows_host_configuration(self) -> None:
+        """Debug logging should appear when the host explicitly enables it."""
+        library_logger = logging.getLogger("pymbrewclient.rest.client")
+        root_logger = logging.getLogger()
+
+        original_logger_level = library_logger.level
+        original_root_level = root_logger.level
+        original_root_handlers = root_logger.handlers[:]
+
+        stream = io.StringIO()
+        handler = logging.StreamHandler(stream)
+        handler.setLevel(logging.DEBUG)
+
+        try:
+            library_logger.setLevel(logging.NOTSET)
+            root_logger.handlers = [handler]
+            root_logger.setLevel(logging.DEBUG)
+
+            self.client.token = None
+            self.client._is_token_valid()
+
+            self.assertIn("Token is invalid or expired.", stream.getvalue())
+        finally:
+            root_logger.handlers = original_root_handlers
+            root_logger.setLevel(original_root_level)
+            library_logger.setLevel(original_logger_level)
 
     @patch("pymbrewclient.rest.client.RestApiClient._get_token")
     @patch("pymbrewclient.rest.client.requests.get")

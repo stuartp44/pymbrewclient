@@ -18,6 +18,7 @@ This library will **only work** if you have access to Minibrew's Pro Portal subs
 - Retrieve session information.
 - Easy-to-use CLI for quick access.
 - Python library for programmatic integration.
+- Uses standard Python logging and stays silent by default unless your application enables DEBUG for `pymbrewclient`.
 
 ## Installation
 
