@@ -33,16 +33,21 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 #
-# Disclaimer: This software is an independent project and is not affiliated with, endorsed by, or associated with MiniBrew. MiniBrew's trademarks, logos, API, and other intellectual property are owned by MiniBrew and are not included in this software. Users are responsible for complying with MiniBrew's terms of service when using this software.import typer
+# Disclaimer: This software is an independent project and is not affiliated with, endorsed by, or associated with MiniBrew. MiniBrew's trademarks, logos, API, and other intellectual property are owned by MiniBrew and are not included in this software. Users are responsible for complying with MiniBrew's terms of service when using this software.
+
+import json
+import logging
+from typing import Annotated
+
 import typer
-from pymbrewclient.rest.client import RestApiClient
+from pydantic import BaseModel
 from rich import print as rich_print
 from rich.pretty import Pretty
-from loguru import logger
-import json
-from pydantic import BaseModel
-from typing import Annotated
-import sys
+
+from pymbrewclient.rest.client import RestApiClient
+
+
+logger = logging.getLogger(__name__)
 
 app = typer.Typer(help="CLI for reading information from the Minibrew Pro Portal.", no_args_is_help=True)
 
@@ -68,9 +73,8 @@ def print_output(data: BaseModel | dict | list, format: str) -> None:
 
 
 def setup_logging(level: str) -> None:
-    """Configure loguru with the specified log level."""
-    logger.remove()  # Remove any default handlers
-    logger.add(sink=sys.stderr, level=level.upper())  # Add a new handler with the specified level
+    """Configure standard logging with the specified log level."""
+    logging.basicConfig(level=getattr(logging, level.upper(), logging.INFO), format="%(message)s", force=True)
 
 
 @app.callback()

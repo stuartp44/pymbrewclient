@@ -33,13 +33,18 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 #
-# Disclaimer: This software is an independent project and is not affiliated with, endorsed by, or associated with MiniBrew. MiniBrew's trademarks, logos, API, and other intellectual property are owned by MiniBrew and are not included in this software. Users are responsible for complying with MiniBrew's terms of service when using this software.import requests
+# Disclaimer: This software is an independent project and is not affiliated with, endorsed by, or associated with MiniBrew. MiniBrew's trademarks, logos, API, and other intellectual property are owned by MiniBrew and are not included in this software. Users are responsible for complying with MiniBrew's terms of service when using this software.
 
-from typing import Any
-import requests
+import logging
 import time
-from .models import TokenResponse, ApiResponse, BreweryOverview, Session
-from loguru import logger
+from typing import Any
+
+import requests
+
+from .models import ApiResponse, BreweryOverview, Session, TokenResponse
+
+
+logger = logging.getLogger(__name__)
 
 
 class RestApiClient:
