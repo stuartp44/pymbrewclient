@@ -34,7 +34,8 @@
 # SOFTWARE.
 #
 # Disclaimer: This software is an independent project and is not affiliated with, endorsed by, or associated with MiniBrew. MiniBrew's trademarks, logos, API, and other intellectual property are owned by MiniBrew and are not included in this software. Users are responsible for complying with MiniBrew's terms of service when using this software.
-
+from dataclasses import asdict, is_dataclass
+from datetime import datetime
 import json
 import logging
 from typing import Annotated
@@ -44,7 +45,9 @@ from pydantic import BaseModel
 from rich import print as rich_print
 from rich.pretty import Pretty
 
+from pymbrewclient.client import BreweryClient, BreweryClientError
 from pymbrewclient.rest.client import RestApiClient
+from pymbrewclient.rest.models import Device, datetime_to_api_string, format_duration
 
 logger = logging.getLogger(__name__)
 
@@ -60,15 +63,40 @@ def initialize_client(base_url: str, username: str, password: str) -> RestApiCli
     return RestApiClient(base_url=base_url, username=username, password=password)
 
 
+def initialize_brewery_client(base_url: str, username: str, password: str) -> BreweryClient:
+    """Initialize the BreweryClient with the provided credentials."""
+    return BreweryClient(base_url=base_url, username=username, password=password)
+
+
+def serialize_output(data: object) -> object:
+    """Convert output to JSON-serializable primitives."""
+    if isinstance(data, BaseModel):
+        return serialize_output(data.dict())
+    if isinstance(data, datetime):
+        return datetime_to_api_string(data)
+    if isinstance(data, Device):
+        return data.to_dict()
+    if is_dataclass(data):
+        return serialize_output(asdict(data))
+    if isinstance(data, dict):
+        return {key: serialize_output(value) for key, value in data.items()}
+    if isinstance(data, list):
+        return [serialize_output(item) for item in data]
+    if hasattr(data, "to_dict"):
+        return serialize_output(data.to_dict())
+    if hasattr(data, "__dict__"):
+        return serialize_output(vars(data))
+    return data
+
+
 def print_output(data: BaseModel | dict | list, format: str) -> None:
     """Print output in the specified format."""
-    if isinstance(data, BaseModel):
-        data = data.dict()
+    serialized_data = serialize_output(data)
 
     if format == "json":
-        typer.echo(json.dumps(data, indent=4))
+        typer.echo(json.dumps(serialized_data, indent=4))
     else:
-        rich_print(Pretty(data))
+        rich_print(Pretty(serialized_data))
 
 
 def setup_logging(level: str) -> None:
@@ -138,9 +166,7 @@ def get_session_info(
     username: str = typer.Option(..., "--username", help="The username for authentication."),
     password: str = typer.Option(..., "--password", help="The password for authentication."),
     base_url: str = typer.Option(base_url, "--base-url", help="The base URL for the API."),
-    sessionid: int = typer.Option(
-        ..., "--sessionid", help="The session ID to fetch information for.", flag_value="https://api.minibrew.io"
-    ),
+    sessionid: int = typer.Option(..., "--sessionid", help="The session ID to fetch information for."),
 ) -> None:
     """
     Fetch and display session information.
@@ -245,17 +271,14 @@ def get_minibrew_devices(
     """
     try:
         logger.info("Fetching all devices...")
-        client = initialize_client(base_url, username, password)
-        overview = client.get_brewery_overview()
-        all_devices = overview.brew_clean_idle + overview.fermenting + overview.serving + overview.brew_acid_clean_idle
-
-        # Only select unique devices
-        unique_devices = list({device.uuid: device for device in all_devices if device.uuid is not None}.values())
+        client = initialize_brewery_client(base_url, username, password)
+        devices = client.get_devices()
+        unique_devices = list({device.uuid: device for device in devices if device.uuid is not None}.values())
 
         selected_data = [
             {
                 "Serial Number": device.serial_number,
-                "Nickname": device.title,
+                "Nickname": device.custom_name or device.title,
                 "Version": device.software_version,
                 "Is online": device.online,
                 "Stage": device.stage,
@@ -266,6 +289,42 @@ def get_minibrew_devices(
     except Exception as e:
         logger.error(f"Error fetching all devices: {e}")
         typer.echo(f"Error fetching all devices: {e}")
+        raise typer.Exit(code=1)
+
+
+@app.command()
+def process_estimate(
+    username: str = typer.Option(..., "--username", help="The username for authentication."),
+    password: str = typer.Option(..., "--password", help="The password for authentication."),
+    base_url: str = typer.Option(base_url, "--base-url", help="The base URL for the API."),
+    device_uuid: str | None = typer.Option(None, "--device-uuid", help="The device UUID to query."),
+    session_id: int | None = typer.Option(None, "--session-id", help="The active session ID to query."),
+    output_format: str = typer.Option("pretty", "--format", help="Output format: pretty or json."),
+) -> None:
+    """Fetch MiniBrew's REST process estimate for one device."""
+    try:
+        client = initialize_brewery_client(base_url, username, password)
+        device = client.get_device(device_uuid=device_uuid, session_id=session_id)
+        estimate = device.process_estimate_remaining
+        remaining_seconds = device.process_estimate_remaining_seconds
+        remaining_formatted = format_duration(remaining_seconds) if remaining_seconds is not None else None
+        payload = {
+            "process_estimate_remaining": datetime_to_api_string(estimate),
+            "process_estimate_remaining_seconds": remaining_seconds,
+            "process_estimate_remaining_formatted": remaining_formatted,
+            "warning": (
+                "MiniBrew provides this as an absolute UTC estimate via REST. Remaining values are calculated "
+                "locally and may be stale or already in the past."
+            ),
+        }
+        print_output(payload, output_format.lower())
+    except BreweryClientError as e:
+        logger.error(f"Error fetching process estimate: {e}")
+        typer.echo(f"Error fetching process estimate: {e}")
+        raise typer.Exit(code=1)
+    except Exception as e:
+        logger.error(f"Error fetching process estimate: {e}")
+        typer.echo(f"Error fetching process estimate: {e}")
         raise typer.Exit(code=1)
 
 
