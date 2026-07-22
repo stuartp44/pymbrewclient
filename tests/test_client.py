@@ -269,7 +269,9 @@ class TestRestApiClient(unittest.TestCase):
 
     @patch("pymbrewclient.rest.client.requests.get")
     @patch("pymbrewclient.rest.client.RestApiClient._ensure_token")
-    def test_get_devices_uses_existing_authentication_flow(self, mock_ensure_token: MagicMock, mock_get: MagicMock) -> None:
+    def test_get_devices_uses_existing_authentication_flow(
+        self, mock_ensure_token: MagicMock, mock_get: MagicMock
+    ) -> None:
         mock_response = MagicMock()
         mock_response.json.return_value = [DEVICE_PAYLOAD]
         mock_response.raise_for_status = MagicMock()
