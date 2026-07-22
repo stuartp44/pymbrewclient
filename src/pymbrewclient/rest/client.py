@@ -34,14 +34,13 @@
 # SOFTWARE.
 #
 # Disclaimer: This software is an independent project and is not affiliated with, endorsed by, or associated with MiniBrew. MiniBrew's trademarks, logos, API, and other intellectual property are owned by MiniBrew and are not included in this software. Users are responsible for complying with MiniBrew's terms of service when using this software.
-
 import logging
 import time
 from typing import Any
 
 import requests
 
-from .models import ApiResponse, BreweryOverview, Session, TokenResponse
+from .models import BreweryOverview, Device, Session, TokenResponse, coerce_device_payload
 
 logger = logging.getLogger(__name__)
 
@@ -59,6 +58,8 @@ class RestApiClient:
         self.username = username
         self.password = password
         self.headers = {"Client": "Breweryportal", "Content-Type": "application/json"}
+        if headers is not None:
+            self.headers.update(headers)
         self.token = None
         self.token_expiry = 0
 
@@ -100,12 +101,11 @@ class RestApiClient:
                     else:
                         masked_dict[key] = mask(item)
                 return masked_dict
-            elif isinstance(value, list):
+            if isinstance(value, list):
                 return [mask(item) for item in value]
-            elif isinstance(value, tuple):
+            if isinstance(value, tuple):
                 return tuple(mask(item) for item in value)
-            else:
-                return value
+            return value
 
         return mask(payload)
 
@@ -117,9 +117,8 @@ class RestApiClient:
         """
         if self.token is not None and time.time() < self.token_expiry:
             return True
-        else:
-            logger.debug("Token is invalid or expired.")
-            return False
+        logger.debug("Token is invalid or expired.")
+        return False
 
     def _ensure_token(self) -> None:
         """
@@ -131,13 +130,13 @@ class RestApiClient:
         if not self._is_token_valid():
             self._get_token()
 
-    def get(self, endpoint: str, params: dict[str, Any] | None = None, ensure_token: bool = True) -> ApiResponse:
+    def get(self, endpoint: str, params: dict[str, Any] | None = None, ensure_token: bool = True) -> requests.Response:
         """
         Perform a GET request.
 
         :param endpoint: The API endpoint (relative to the base URL).
         :param params: Optional query parameters.
-        :return: An ApiResponse object containing the response data.
+        :return: The response object.
         """
         logger.debug(f"GET request to {endpoint} with params: {params}")
         if ensure_token:
@@ -180,6 +179,12 @@ class RestApiClient:
         logger.debug("Fetching brewery overview...")
         response = self.get("v1/breweryoverview")
         return BreweryOverview(**response.json())
+
+    def get_devices(self) -> list[Device]:
+        """Fetch devices from the API."""
+        logger.debug("Fetching devices...")
+        response = self.get("v1/devices")
+        return [coerce_device_payload(device) for device in response.json()]
 
     def get_session_info(self, sessionid: int) -> Session:
         """

@@ -175,3 +175,6 @@ sandbox/
 # vim files
 *.swo
 *.swp
+
+# macOS Finder
+.DS_Store

@@ -2,6 +2,43 @@
 
 This document contains example payloads returned by the Minibrew API.
 
+## Devices Response
+
+The `get_devices()` method returns the authenticated device list from `/v1/devices/`.
+
+### Example Response
+
+```json
+[
+    {
+        "uuid": "ZZZZZZZZ-ZZZZZZZZ",
+        "serial_number": "ZZZZZZZZ-ZZZZZZZZ",
+        "current_state": 2,
+        "process_type": 2,
+        "process_state": 101,
+        "user_action": 2,
+        "active_session": 80675,
+        "connection_status": 1,
+        "last_time_online": "2026-07-18T09:56:31.100000Z",
+        "software_version": "3.2.3",
+        "custom_name": "Fermenter 1",
+        "device_type": 1,
+        "image": "https://minibrew.s3.amazonaws.com/static/devices/keg.png",
+        "last_process_state_change": "2026-07-18T09:45:16Z",
+        "process_estimate_remaining": "2026-07-18T09:57:31.542739Z",
+        "text": "Needs your attention",
+        "updating": false
+    }
+]
+```
+
+### Process Estimate Notes
+
+- `process_estimate_remaining` is an absolute UTC timestamp supplied by MiniBrew's REST API.
+- The library parses `last_time_online`, `last_process_state_change`, and `process_estimate_remaining` into timezone-aware Python `datetime` objects.
+- `process_estimate_remaining_seconds` is calculated locally from the REST timestamp and can be `0` even when the original timestamp is still preserved.
+- This value can be stale or already in the past. It is not MiniBrew's live MQTT countdown.
+
 ## Brewery Overview Response
 
 The `get_brewery_overview()` method returns the current status of all devices in your brewery, including brewing devices, kegs, and their current states.

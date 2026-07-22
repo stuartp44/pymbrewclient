@@ -33,9 +33,19 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 #
-# Disclaimer: This software is an independent project and is not affiliated with, endorsed by, or associated with MiniBrew. MiniBrew's trademarks, logos, API, and other intellectual property are owned by MiniBrew and are not included in this software. Users are responsible for complying with MiniBrew's terms of service when using this software.from pymbrewclient.rest.client import RestApiClient
+# Disclaimer: This software is an independent project and is not affiliated with, endorsed by, or associated with MiniBrew. MiniBrew's trademarks, logos, API, and other intellectual property are owned by MiniBrew and are not included in this software. Users are responsible for complying with MiniBrew's terms of service when using this software.
+from datetime import datetime
+
 from pymbrewclient.rest.client import RestApiClient
-from pymbrewclient.rest.models import TokenResponse, BreweryOverview, Session
+from pymbrewclient.rest.models import BreweryOverview, Device, Session, TokenResponse
+
+
+class BreweryClientError(ValueError):
+    """Base exception for BreweryClient lookup and validation errors."""
+
+
+class DeviceLookupError(BreweryClientError):
+    """Raised when a device cannot be resolved uniquely."""
 
 
 class BreweryClient:
@@ -69,6 +79,10 @@ class BreweryClient:
         """
         return self.client.get_brewery_overview()
 
+    def get_devices(self) -> list[Device]:
+        """Fetch and return the authenticated device list."""
+        return self.client.get_devices()
+
     def get_session_info(self, sessionid: int) -> Session:
         """
         Fetch and return session information for a given session ID.
@@ -77,3 +91,39 @@ class BreweryClient:
         :return: A Session object containing the session data.
         """
         return self.client.get_session_info(sessionid)
+
+    def _get_selected_device(self, device_uuid: str | None = None, session_id: int | None = None) -> Device:
+        if (device_uuid is None) == (session_id is None):
+            raise BreweryClientError("Provide exactly one of device_uuid or session_id.")
+
+        devices = self.get_devices()
+        if device_uuid is not None:
+            matching_devices = [device for device in devices if device.uuid == device_uuid]
+            if not matching_devices:
+                raise DeviceLookupError(f"No device found for UUID '{device_uuid}'.")
+            return matching_devices[0]
+
+        matching_devices = [device for device in devices if device.active_session == session_id]
+        if not matching_devices:
+            raise DeviceLookupError(f"No device found for active session ID {session_id}.")
+        if len(matching_devices) > 1:
+            raise DeviceLookupError(f"Multiple devices found for active session ID {session_id}.")
+        return matching_devices[0]
+
+    def get_device(self, device_uuid: str | None = None, session_id: int | None = None) -> Device:
+        """Return one authenticated device selected by UUID or active session."""
+        return self._get_selected_device(device_uuid=device_uuid, session_id=session_id)
+
+    def get_process_estimate(self, device_uuid: str | None = None, session_id: int | None = None) -> datetime | None:
+        """Return MiniBrew's absolute UTC process estimate for a selected device."""
+        device = self.get_device(device_uuid=device_uuid, session_id=session_id)
+        return device.process_estimate_remaining
+
+    def get_process_estimate_remaining_seconds(
+        self,
+        device_uuid: str | None = None,
+        session_id: int | None = None,
+    ) -> int | None:
+        """Return a locally calculated remaining duration for a selected device."""
+        device = self.get_device(device_uuid=device_uuid, session_id=session_id)
+        return device.process_estimate_remaining_seconds
