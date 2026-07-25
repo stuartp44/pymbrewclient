@@ -33,10 +33,10 @@ class MiniBrewMqttClient:
     ) -> None:
         self._rest_client = rest_client
         self._mqtt_client_factory = mqtt_client_factory
-        self._client_uuid = uuid.uuid4()
-        self.client_id = f"breweryportal-{self._client_uuid}"
+        self._client_uuid_obj = uuid.uuid4()
+        self.client_id = f"breweryportal-{self._client_uuid_obj}"
         self._mqtt_client = self._build_mqtt_client()
-        self._subscriptions: set[str] = set()
+        self._subscriptions: dict[str, int] = {}
         self._has_connected_once = False
         self._disconnecting = False
 
@@ -82,12 +82,12 @@ class MiniBrewMqttClient:
 
     def subscribe(self, topic: str, qos: int = 0) -> tuple[int, int | None]:
         result = self._mqtt_client.subscribe(topic, qos=qos)
-        self._subscriptions.add(topic)
+        self._subscriptions[topic] = qos
         return result
 
     def unsubscribe(self, topic: str) -> tuple[int, int | None]:
         result = self._mqtt_client.unsubscribe(topic)
-        self._subscriptions.discard(topic)
+        self._subscriptions.pop(topic, None)
         return result
 
     def subscribe_device_logs(self, device_uuid: str, qos: int = 0) -> tuple[int, int | None]:
@@ -102,7 +102,6 @@ class MiniBrewMqttClient:
         token = self._get_api_token()
         user_uuid = self._rest_client.get_user_profile().uuid
         username = f"breweryportal-{user_uuid}"
-        password = token
 
         mqtt_client = self._mqtt_client_factory(
             client_id=self.client_id,
@@ -117,7 +116,7 @@ class MiniBrewMqttClient:
         )
         mqtt_client.tls_set()
         mqtt_client.tls_insecure_set(False)
-        mqtt_client.username_pw_set(username=username, ******
+        mqtt_client.username_pw_set(username, token)
         mqtt_client.will_set(
             topic=f"apps/lastwill/{self.client_id}",
             payload=b"offline",
@@ -138,13 +137,12 @@ class MiniBrewMqttClient:
 
     def _handle_connect(
         self,
-        client: mqtt.Client,
-        userdata: object,
-        flags: dict[str, int],
+        _client: mqtt.Client,
+        _userdata: object,
+        _flags: dict[str, int],
         rc: int,
-        properties: object = None,
+        _properties: object = None,
     ) -> None:
-        del client, userdata, flags, properties
         if rc != 0:
             self._emit_error("MQTT connection failed.")
             return
@@ -153,34 +151,32 @@ class MiniBrewMqttClient:
         self._has_connected_once = True
 
         if is_reconnect:
-            for topic in sorted(self._subscriptions):
-                self._mqtt_client.subscribe(topic, qos=0)
+            for topic, qos in self._subscriptions.items():
+                self._mqtt_client.subscribe(topic, qos=qos)
 
         if self._on_connected is not None:
-            self._safe_callback(lambda: self._on_connected())
+            self._safe_callback(self._on_connected)
 
     def _handle_disconnect(
         self,
-        client: mqtt.Client,
-        userdata: object,
+        _client: mqtt.Client,
+        _userdata: object,
         rc: int,
-        properties: object = None,
+        _properties: object = None,
     ) -> None:
-        del client, userdata, properties
         if not self._disconnecting and rc != 0:
             if self._on_reconnecting is not None:
-                self._safe_callback(lambda: self._on_reconnecting(rc))
+                self._safe_callback(self._on_reconnecting, rc)
 
         if self._on_disconnected is not None:
-            self._safe_callback(lambda: self._on_disconnected(rc))
+            self._safe_callback(self._on_disconnected, rc)
 
     def _handle_message(
         self,
-        client: mqtt.Client,
-        userdata: object,
+        _client: mqtt.Client,
+        _userdata: object,
         msg: mqtt.MQTTMessage,
     ) -> None:
-        del client, userdata
         device_uuid = _extract_device_uuid_from_topic(msg.topic)
         message = MqttMessage(
             topic=msg.topic,
@@ -196,16 +192,16 @@ class MiniBrewMqttClient:
                 self._emit_error("MQTT message decode failed.")
 
         if self._on_message is not None:
-            self._safe_callback(lambda: self._on_message(message))
+            self._safe_callback(self._on_message, message)
 
     def _emit_error(self, message: str) -> None:
         if self._on_error is not None:
-            self._safe_callback(lambda: self._on_error(message))
+            self._safe_callback(self._on_error, message)
 
     @staticmethod
-    def _safe_callback(callback: Callable[[], None]) -> None:
+    def _safe_callback(callback: Callable[..., None], *args: object) -> None:
         try:
-            callback()
+            callback(*args)
         except Exception:
             logger.exception("MQTT callback raised an unexpected error.")
 

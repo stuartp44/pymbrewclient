@@ -289,20 +289,22 @@ class UserProfile:
 
 def coerce_user_profile_payload(payload: dict[str, Any]) -> UserProfile:
     """Convert user profile payloads into a typed UserProfile."""
-    candidate_payload = payload.get("user") if isinstance(payload.get("user"), dict) else payload
+    user_payload = payload.get("user")
+    candidate_payload = user_payload if isinstance(user_payload, dict) else payload
+    fallback_payload: dict[str, Any] = payload if candidate_payload is not payload else {}
 
     user_uuid = _coerce_to_str(
         candidate_payload.get("uuid")
         or candidate_payload.get("user_uuid")
         or candidate_payload.get("profile_uuid")
-        or payload.get("uuid")
-        or payload.get("user_uuid")
+        or fallback_payload.get("uuid")
+        or fallback_payload.get("user_uuid")
     )
     if user_uuid is None:
         raise ValueError("Authenticated user profile response does not include a UUID.")
 
-    user_id = _coerce_to_int(candidate_payload.get("id") or payload.get("id"))
-    email = _coerce_to_str(candidate_payload.get("email") or payload.get("email"))
+    user_id = _coerce_to_int(candidate_payload.get("id") or fallback_payload.get("id"))
+    email = _coerce_to_str(candidate_payload.get("email") or fallback_payload.get("email"))
     return UserProfile(uuid=user_uuid, id=user_id, email=email, raw=payload)
 
 
@@ -333,6 +335,9 @@ def _coerce_to_int(value: object) -> int | None:
         return None
     if isinstance(value, int):
         return value
-    if isinstance(value, str) and value.isdigit():
-        return int(value)
+    if isinstance(value, str):
+        try:
+            return int(value)
+        except ValueError:
+            return None
     return None

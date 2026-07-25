@@ -166,7 +166,7 @@ def handle_message(message):
     print(telemetry.session_id, telemetry.current_temperature)
 ```
 
-`next_action_at` is always timezone-aware UTC:
+When available, `next_action_at` is timezone-aware UTC:
 
 ```python
 def handle_message(message):

@@ -40,7 +40,15 @@ from typing import Any
 
 import requests
 
-from .models import BreweryOverview, Device, Session, TokenResponse, UserProfile, coerce_device_payload, coerce_user_profile_payload
+from .models import (
+    BreweryOverview,
+    Device,
+    Session,
+    TokenResponse,
+    UserProfile,
+    coerce_device_payload,
+    coerce_user_profile_payload,
+)
 
 logger = logging.getLogger(__name__)
 

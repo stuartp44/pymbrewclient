@@ -74,7 +74,7 @@ class FakeMqttClient:
 
 class TestMiniBrewMqttClient(unittest.TestCase):
     def setUp(self) -> None:
-        self.rest_client = RestApiClient(base_url="https://api.example.com", username="user@example.com", ******)
+        self.rest_client = RestApiClient("user@example.com", "test-pass", "https://api.example.com")
         self.rest_client._ensure_token = MagicMock()
         self.rest_client.token = "api-token-123"
         self.rest_client.get_user_profile = MagicMock(return_value=UserProfile(uuid="user-uuid-123"))
@@ -131,12 +131,32 @@ class TestMiniBrewMqttClient(unittest.TestCase):
         mqtt = MiniBrewMqttClient(rest_client=self.rest_client, mqtt_client_factory=FakeMqttClient)
         fake = mqtt._mqtt_client
         topic = "devices/logs/2403K0561-61BMUWBU"
-        mqtt.subscribe(topic)
+        mqtt.subscribe(topic, qos=1)
+        self.assertEqual(fake.subscribe_calls, [(topic, 1)])
 
         fake.on_connect(fake, None, {}, 0)
+        self.assertEqual(fake.subscribe_calls.count((topic, 1)), 1)
         fake.on_connect(fake, None, {}, 0)
 
-        self.assertEqual(fake.subscribe_calls.count((topic, 0)), 2)
+        self.assertEqual(fake.subscribe_calls.count((topic, 1)), 2)
+
+    def test_unsubscribed_topic_is_not_resubscribed(self) -> None:
+        mqtt = MiniBrewMqttClient(rest_client=self.rest_client, mqtt_client_factory=FakeMqttClient)
+        fake = mqtt._mqtt_client
+        kept_topic = "devices/logs/2403K0561-61BMUWBU"
+        removed_topic = "devices/logs/2403K0561-OTHERDEVICE"
+        mqtt.subscribe(kept_topic)
+        mqtt.subscribe(removed_topic)
+        mqtt.unsubscribe(removed_topic)
+        self.assertEqual(fake.subscribe_calls, [(kept_topic, 0), (removed_topic, 0)])
+
+        fake.on_connect(fake, None, {}, 0)
+        self.assertEqual(fake.subscribe_calls.count((kept_topic, 0)), 1)
+        fake.on_connect(fake, None, {}, 0)
+        self.assertEqual(len(fake.subscribe_calls), 3)
+
+        self.assertEqual(fake.subscribe_calls.count((kept_topic, 0)), 2)
+        self.assertEqual(fake.subscribe_calls.count((removed_topic, 0)), 1)
 
     def test_callbacks_receive_connection_and_message_events(self) -> None:
         mqtt = MiniBrewMqttClient(rest_client=self.rest_client, mqtt_client_factory=FakeMqttClient)
@@ -198,14 +218,14 @@ class TestMqttProtobufDecode(unittest.TestCase):
         self.assertAlmostEqual(telemetry.target_temperature or 0.0, 20.0, places=4)
         self.assertEqual(telemetry.remaining_process_duration_seconds, 5400)
         self.assertEqual(telemetry.seconds_until_next_action, 300)
-        self.assertEqual(telemetry.message_timestamp, datetime(2024, 7, 25, 13, 20, tzinfo=timezone.utc))
-        self.assertEqual(telemetry.next_action_at, datetime(2024, 7, 25, 13, 25, tzinfo=timezone.utc))
+        self.assertEqual(telemetry.message_timestamp, datetime(2024, 7, 25, 16, 0, tzinfo=timezone.utc))
+        self.assertEqual(telemetry.next_action_at, datetime(2024, 7, 25, 16, 5, tzinfo=timezone.utc))
         self.assertIn(99, telemetry.unknown_fields)
 
 
 class TestBreweryClientMqttApi(unittest.TestCase):
     def test_create_mqtt_client_api(self) -> None:
-        client = BreweryClient(username="test_user", ******, base_url="https://api.example.com")
+        client = BreweryClient("test_user", "test-pass", "https://api.example.com")
         client.client._ensure_token = MagicMock()
         client.client.token = "token"
         client.client.get_user_profile = MagicMock(return_value=UserProfile(uuid="user-uuid"))
