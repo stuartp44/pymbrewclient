@@ -124,6 +124,61 @@ print(remaining_seconds)
 - MiniBrew can return an estimate that is already in the past when a device is paused, needs user attention, has stopped reporting, or when the backend estimate has not refreshed yet.
 - This feature exposes the REST estimate only. It is not MiniBrew's live MQTT countdown.
 
+## MQTT over WebSocket
+
+`pymbrewclient` can open the MiniBrew MQTT-over-WebSocket stream and subscribe to device logs.
+
+```python
+from pymbrewclient.client import BreweryClient
+
+client = BreweryClient(username, password)
+mqtt = client.create_mqtt_client()
+
+mqtt.connect()
+mqtt.subscribe_device_logs("2403K0561-61BMUWBU")
+mqtt.disconnect()
+```
+
+Context manager cleanup is supported:
+
+```python
+with client.create_mqtt_client() as mqtt:
+    mqtt.subscribe_device_logs("2403K0561-61BMUWBU")
+```
+
+Raw message handling:
+
+```python
+def handle_message(message):
+    print(message.topic, message.device_uuid, len(message.payload))
+
+mqtt = client.create_mqtt_client()
+mqtt.set_on_message(handle_message)
+```
+
+Decoded telemetry example:
+
+```python
+def handle_message(message):
+    telemetry = message.decoded_telemetry
+    if telemetry is None:
+        return
+    print(telemetry.session_id, telemetry.current_temperature)
+```
+
+`next_action_at` is always timezone-aware UTC:
+
+```python
+def handle_message(message):
+    telemetry = message.decoded_telemetry
+    if telemetry and telemetry.next_action_at:
+        print(telemetry.next_action_at.isoformat())
+```
+
+> **Security warning:** The API token from REST authentication is reused as the MQTT password. Never log this token.
+
+> **Schema limitation:** MiniBrew's full protobuf schema is not publicly available. Decoding currently extracts known observed telemetry fields while keeping raw payload bytes and unknown field numbers for forward compatibility.
+
 
 ## Development
 

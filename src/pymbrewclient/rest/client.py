@@ -40,7 +40,7 @@ from typing import Any
 
 import requests
 
-from .models import BreweryOverview, Device, Session, TokenResponse, coerce_device_payload
+from .models import BreweryOverview, Device, Session, TokenResponse, UserProfile, coerce_device_payload, coerce_user_profile_payload
 
 logger = logging.getLogger(__name__)
 
@@ -196,3 +196,23 @@ class RestApiClient:
         logger.debug(f"Fetching session info for session ID: {sessionid}")
         response = self.get(f"v1/sessions/{sessionid}")
         return Session(**response.json())
+
+    def get_user_profile(self) -> UserProfile:
+        """Fetch the authenticated user profile and return typed identity details."""
+        self._ensure_token()
+        profile_endpoints = ("v1/users/me", "v1/profile", "v1/user")
+        last_error: Exception | None = None
+
+        for endpoint in profile_endpoints:
+            try:
+                response = self.get(endpoint, ensure_token=False)
+                return coerce_user_profile_payload(response.json())
+            except requests.HTTPError as error:
+                last_error = error
+                if error.response is not None and error.response.status_code == 404:
+                    continue
+                raise
+            except ValueError as error:
+                raise ValueError("Unable to parse authenticated user profile response.") from error
+
+        raise RuntimeError("Unable to fetch authenticated user profile from known endpoints.") from last_error

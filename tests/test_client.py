@@ -6,12 +6,13 @@ from datetime import datetime, timezone
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
+import requests
 from typer.testing import CliRunner
 
 from pymbrewclient.cli import app
 from pymbrewclient.client import BreweryClient, BreweryClientError, DeviceLookupError
 from pymbrewclient.rest.client import RestApiClient
-from pymbrewclient.rest.models import Beer, BreweryOverview, Device, TokenResponse, format_duration
+from pymbrewclient.rest.models import Beer, BreweryOverview, Device, TokenResponse, UserProfile, format_duration
 
 DEVICE_PAYLOAD = {
     "uuid": "device-uuid-1",
@@ -317,6 +318,43 @@ class TestRestApiClient(unittest.TestCase):
             self.client._get_token()
         self.assertEqual(str(context.exception), "API error")
         mock_post.assert_called_once()
+
+    @patch("pymbrewclient.rest.client.requests.get")
+    @patch("pymbrewclient.rest.client.RestApiClient._ensure_token")
+    def test_get_user_profile(self, mock_ensure_token: MagicMock, mock_get: MagicMock) -> None:
+        mock_response = MagicMock()
+        mock_response.json.return_value = {"uuid": "user-uuid-123", "email": "user@example.com", "id": 42}
+        mock_response.raise_for_status = MagicMock()
+        mock_get.return_value = mock_response
+
+        profile = self.client.get_user_profile()
+
+        self.assertIsInstance(profile, UserProfile)
+        self.assertEqual(profile.uuid, "user-uuid-123")
+        self.assertEqual(profile.email, "user@example.com")
+        self.assertEqual(profile.id, 42)
+        mock_ensure_token.assert_called_once()
+
+    @patch("pymbrewclient.rest.client.requests.get")
+    @patch("pymbrewclient.rest.client.RestApiClient._ensure_token")
+    def test_get_user_profile_falls_back_when_endpoint_not_found(
+        self, mock_ensure_token: MagicMock, mock_get: MagicMock
+    ) -> None:
+        not_found_response = MagicMock(status_code=404)
+        not_found_error = requests.HTTPError("Not found", response=not_found_response)
+
+        first_response = MagicMock()
+        first_response.raise_for_status.side_effect = not_found_error
+
+        second_response = MagicMock()
+        second_response.raise_for_status = MagicMock()
+        second_response.json.return_value = {"user": {"uuid": "fallback-uuid"}}
+        mock_get.side_effect = [first_response, second_response]
+
+        profile = self.client.get_user_profile()
+
+        self.assertEqual(profile.uuid, "fallback-uuid")
+        mock_ensure_token.assert_called_once()
 
 
 class TestDeviceModel(unittest.TestCase):

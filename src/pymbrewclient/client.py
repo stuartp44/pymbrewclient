@@ -36,8 +36,9 @@
 # Disclaimer: This software is an independent project and is not affiliated with, endorsed by, or associated with MiniBrew. MiniBrew's trademarks, logos, API, and other intellectual property are owned by MiniBrew and are not included in this software. Users are responsible for complying with MiniBrew's terms of service when using this software.
 from datetime import datetime
 
+from pymbrewclient.mqtt.client import MiniBrewMqttClient
 from pymbrewclient.rest.client import RestApiClient
-from pymbrewclient.rest.models import BreweryOverview, Device, Session, TokenResponse
+from pymbrewclient.rest.models import BreweryOverview, Device, Session, TokenResponse, UserProfile
 
 
 class BreweryClientError(ValueError):
@@ -92,6 +93,14 @@ class BreweryClient:
         """
         return self.client.get_session_info(sessionid)
 
+    def get_user_profile(self) -> UserProfile:
+        """Fetch and return the authenticated user profile."""
+        return self.client.get_user_profile()
+
+    def get_user_uuid(self) -> str:
+        """Fetch and return the authenticated user's UUID."""
+        return self.get_user_profile().uuid
+
     def _get_selected_device(self, device_uuid: str | None = None, session_id: int | None = None) -> Device:
         if (device_uuid is None) == (session_id is None):
             raise BreweryClientError("Provide exactly one of device_uuid or session_id.")
@@ -127,3 +136,7 @@ class BreweryClient:
         """Return a locally calculated remaining duration for a selected device."""
         device = self.get_device(device_uuid=device_uuid, session_id=session_id)
         return device.process_estimate_remaining_seconds
+
+    def create_mqtt_client(self) -> MiniBrewMqttClient:
+        """Create an MQTT-over-WebSocket client authenticated with the current API token."""
+        return MiniBrewMqttClient(rest_client=self.client)

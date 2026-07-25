@@ -35,12 +35,14 @@
 #
 # Disclaimer: This software is an independent project and is not affiliated with, endorsed by, or associated with MiniBrew. MiniBrew's trademarks, logos, API, and other intellectual property are owned by MiniBrew and are not included in this software. Users are responsible for complying with MiniBrew's terms of service when using this software.
 from .client import BreweryClient, BreweryClientError, DeviceLookupError
-from .rest.models import Device, TokenResponse, ApiResponse, BreweryOverview, Session, DeviceDetails, Beer
+from .mqtt.models import DecodedDeviceLogTelemetry, MqttMessage
+from .rest.models import Device, TokenResponse, ApiResponse, BreweryOverview, Session, DeviceDetails, Beer, UserProfile
 
 __all__ = [
     "BreweryClient",
     "BreweryClientError",
     "DeviceLookupError",
+    "DecodedDeviceLogTelemetry",
     "Device",
     "TokenResponse",
     "ApiResponse",
@@ -48,4 +50,6 @@ __all__ = [
     "Session",
     "DeviceDetails",
     "Beer",
+    "UserProfile",
+    "MqttMessage",
 ]

@@ -34,8 +34,9 @@
 # SOFTWARE.
 #
 # Disclaimer: This software is an independent project and is not affiliated with, endorsed by, or associated with MiniBrew. MiniBrew's trademarks, logos, API, and other intellectual property are owned by MiniBrew and are not included in this software. Users are responsible for complying with MiniBrew's terms of service when using this software.
-from dataclasses import asdict, dataclass, fields
+from dataclasses import asdict, dataclass, field, fields
 from datetime import datetime, timedelta, timezone
+from typing import Any
 
 
 def parse_api_datetime(value: str | None) -> datetime | None:
@@ -278,6 +279,33 @@ class ApiResponse:
     message: str | None
 
 
+@dataclass
+class UserProfile:
+    uuid: str
+    id: int | None = None
+    email: str | None = None
+    raw: dict[str, Any] = field(default_factory=dict)
+
+
+def coerce_user_profile_payload(payload: dict[str, Any]) -> UserProfile:
+    """Convert user profile payloads into a typed UserProfile."""
+    candidate_payload = payload.get("user") if isinstance(payload.get("user"), dict) else payload
+
+    user_uuid = _coerce_to_str(
+        candidate_payload.get("uuid")
+        or candidate_payload.get("user_uuid")
+        or candidate_payload.get("profile_uuid")
+        or payload.get("uuid")
+        or payload.get("user_uuid")
+    )
+    if user_uuid is None:
+        raise ValueError("Authenticated user profile response does not include a UUID.")
+
+    user_id = _coerce_to_int(candidate_payload.get("id") or payload.get("id"))
+    email = _coerce_to_str(candidate_payload.get("email") or payload.get("email"))
+    return UserProfile(uuid=user_uuid, id=user_id, email=email, raw=payload)
+
+
 def coerce_device_payload(device: Device | dict[str, object]) -> Device:
     """Convert device dictionaries into Device objects while filtering unknown fields."""
     if isinstance(device, Device):
@@ -290,3 +318,21 @@ def coerce_device_payload(device: Device | dict[str, object]) -> Device:
 
 def _coerce_device_list(devices: list[Device] | list[dict[str, object]]) -> list[Device]:
     return [coerce_device_payload(device) for device in devices]
+
+
+def _coerce_to_str(value: object) -> str | None:
+    if value is None:
+        return None
+    if isinstance(value, str):
+        return value
+    return str(value)
+
+
+def _coerce_to_int(value: object) -> int | None:
+    if value is None:
+        return None
+    if isinstance(value, int):
+        return value
+    if isinstance(value, str) and value.isdigit():
+        return int(value)
+    return None
