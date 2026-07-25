@@ -199,7 +199,7 @@ def decode_device_log(msg: MqttMessage) -> DeviceLogMessage:
 
     try:
         raw = decode_raw_fields(msg.payload)
-    except (ValueError, Exception) as exc:  # noqa: BLE001
+    except Exception as exc:  # noqa: BLE001
         base.decode_error = f"Wire decode failed: {exc}"
         return base
 
