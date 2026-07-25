@@ -38,6 +38,7 @@ from dataclasses import asdict, is_dataclass
 from datetime import datetime
 import json
 import logging
+import threading
 from typing import Annotated
 
 import typer
@@ -46,6 +47,7 @@ from rich import print as rich_print
 from rich.pretty import Pretty
 
 from pymbrewclient.client import BreweryClient, BreweryClientError
+from pymbrewclient.mqtt.models import DeviceLogMessage
 from pymbrewclient.rest.client import RestApiClient
 from pymbrewclient.rest.models import Device, datetime_to_api_string, format_duration
 
@@ -74,6 +76,8 @@ def serialize_output(data: object) -> object:
         return serialize_output(data.dict())
     if isinstance(data, datetime):
         return datetime_to_api_string(data)
+    if isinstance(data, bytes):
+        return data.hex()
     if isinstance(data, Device):
         return data.to_dict()
     if is_dataclass(data):
@@ -97,6 +101,29 @@ def print_output(data: BaseModel | dict | list, format: str) -> None:
         typer.echo(json.dumps(serialized_data, indent=4))
     else:
         rich_print(Pretty(serialized_data))
+
+
+def curate_device_log_output(msg: DeviceLogMessage) -> dict[str, object]:
+    """Return useful decoded telemetry without verbose protobuf internals."""
+    curated = {
+        "topic": msg.topic,
+        "received_at": msg.received_at,
+        "device_uuid": msg.device_uuid,
+        "sequence_number": msg.sequence_number,
+        "session_id": msg.session_id,
+        "device_timestamp": msg.device_timestamp,
+        "current_state": msg.current_state,
+        "process_type": msg.process_type,
+        "process_state": msg.process_state,
+        "user_action": msg.user_action,
+        "current_temperature": msg.current_temperature,
+        "target_temperature": msg.target_temperature,
+        "wifi_rssi_dbm": msg.wifi_rssi_dbm,
+        "seconds_until_next_action": msg.seconds_until_next_action,
+        "next_action_at": msg.next_action_at,
+        "decode_error": msg.decode_error,
+    }
+    return {key: value for key, value in curated.items() if value is not None}
 
 
 def setup_logging(level: str) -> None:
@@ -325,6 +352,72 @@ def process_estimate(
     except Exception as e:
         logger.error(f"Error fetching process estimate: {e}")
         typer.echo(f"Error fetching process estimate: {e}")
+        raise typer.Exit(code=1)
+
+
+@app.command()
+def watch_device_logs(
+    username: str = typer.Option(..., "--username", help="The username for authentication."),
+    password: str = typer.Option(..., "--password", help="The password for authentication."),
+    base_url: str = typer.Option(base_url, "--base-url", help="The base URL for the API."),
+    serials: Annotated[
+        list[str],
+        typer.Option("--serial", help="Device serial number to watch (can be specified multiple times)."),
+    ] = [],
+    output_format: str = typer.Option("pretty", "--format", help="Output format: pretty or json."),
+    duration: int | None = typer.Option(
+        None, "--duration", help="Stop automatically after this many seconds (default: run until Ctrl+C)."
+    ),
+    debug: bool = typer.Option(
+        False,
+        "--debug",
+        help="Include the raw payload and all decoded protobuf fields.",
+    ),
+) -> None:
+    """Stream real-time MQTT device telemetry logs for one or more devices."""
+    if not serials:
+        typer.echo("Error: at least one --serial is required.")
+        raise typer.Exit(code=1)
+
+    try:
+        client = initialize_brewery_client(base_url, username, password)
+        stop_event = threading.Event()
+
+        with client.create_mqtt_client() as mqtt:
+
+            def on_connected() -> None:
+                typer.echo(f"Connected. Watching: {', '.join(serials)}")
+
+            def on_disconnected() -> None:
+                typer.echo("Disconnected.")
+
+            def on_error(exc: Exception) -> None:
+                typer.echo(f"MQTT error: {exc}")
+
+            def on_device_log(msg: DeviceLogMessage) -> None:
+                output = msg if debug else curate_device_log_output(msg)
+                print_output(output, output_format.lower())
+
+            mqtt.on_connected(on_connected)
+            mqtt.on_disconnected(on_disconnected)
+            mqtt.on_error(on_error)
+            mqtt.on_device_log(on_device_log)
+
+            for serial in serials:
+                mqtt.subscribe_device_logs(serial)
+
+            try:
+                stop_event.wait(timeout=duration)
+            except KeyboardInterrupt:
+                typer.echo("\nStopping...")
+
+    except BreweryClientError as e:
+        logger.error(f"Error: {e}")
+        typer.echo(f"Error: {e}")
+        raise typer.Exit(code=1)
+    except Exception as e:
+        logger.error(f"Error: {e}")
+        typer.echo(f"Error: {e}")
         raise typer.Exit(code=1)
 
 

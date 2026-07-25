@@ -40,7 +40,7 @@ from typing import Any
 
 import requests
 
-from .models import BreweryOverview, Device, Session, TokenResponse, coerce_device_payload
+from .models import BreweryOverview, Device, Session, TokenResponse, UserProfile, coerce_device_payload
 
 logger = logging.getLogger(__name__)
 
@@ -196,3 +196,20 @@ class RestApiClient:
         logger.debug(f"Fetching session info for session ID: {sessionid}")
         response = self.get(f"v1/sessions/{sessionid}")
         return Session(**response.json())
+
+    def get_user_profile(self) -> UserProfile:
+        """
+        Fetch the authenticated user's profile from the API.
+
+        :return: A UserProfile object containing the user UUID and profile data.
+        """
+        logger.debug("Fetching user profile...")
+        response = self.get("v1/users/me")
+        data = response.json()
+        return UserProfile(
+            uuid=data["uuid"],
+            email=data.get("email"),
+            username=data.get("username") or data.get("display_name"),
+            first_name=data.get("first_name"),
+            last_name=data.get("last_name"),
+        )

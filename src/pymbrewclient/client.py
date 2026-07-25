@@ -37,7 +37,7 @@
 from datetime import datetime
 
 from pymbrewclient.rest.client import RestApiClient
-from pymbrewclient.rest.models import BreweryOverview, Device, Session, TokenResponse
+from pymbrewclient.rest.models import BreweryOverview, Device, Session, TokenResponse, UserProfile
 
 
 class BreweryClientError(ValueError):
@@ -127,3 +127,43 @@ class BreweryClient:
         """Return a locally calculated remaining duration for a selected device."""
         device = self.get_device(device_uuid=device_uuid, session_id=session_id)
         return device.process_estimate_remaining_seconds
+
+    def get_user_profile(self) -> UserProfile:
+        """
+        Fetch and return the authenticated user's profile.
+
+        The user UUID is required to construct MQTT credentials.
+
+        :return: A UserProfile object containing the user UUID and profile data.
+        """
+        return self.client.get_user_profile()
+
+    def create_mqtt_client(self) -> "MqttClient":
+        """
+        Create and return a configured MQTT-over-WebSocket client.
+
+        The current REST API token is reused as the MQTT password.  A fresh
+        token is obtained if the current one has expired.  A new random
+        ``client_uuid`` is generated for each call, so multiple independent
+        MQTT clients can be created from the same :class:`BreweryClient`.
+
+        .. warning::
+
+            The API token is used as the MQTT password.  Do not log the
+            returned :class:`~pymbrewclient.mqtt.MqttClient` instance in
+            contexts that would reveal sensitive credentials.
+
+        :return: A ready-to-connect :class:`~pymbrewclient.mqtt.MqttClient`.
+        """
+        from pymbrewclient.mqtt.client import MqttClient
+
+        self.client._ensure_token()
+        profile = self.get_user_profile()
+        return MqttClient(api_token=self.client.token, user_uuid=profile.uuid)
+
+
+# Local alias for the forward reference in create_mqtt_client's type hint
+try:
+    from pymbrewclient.mqtt.client import MqttClient  # noqa: E402, F401
+except ImportError:
+    pass

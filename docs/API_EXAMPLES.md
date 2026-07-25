@@ -164,3 +164,120 @@ The response is organized into different categories based on device state:
 - `stage`: "Serving"
 - Contains beer information
 - Temperature maintained at serving temperature
+
+---
+
+## MQTT-over-WebSocket
+
+`pymbrewclient` supports real-time device telemetry over MQTT-over-WebSocket using
+`create_mqtt_client()`.  The underlying broker is `broker.minibrew.io:15675/ws` (TLS).
+
+> **Security warning:** The MiniBrew REST API token is used as the MQTT
+> password.  Do **not** log the `MqttClient` object, its `repr()`, or any
+> callback data in contexts where credentials could be exposed.
+
+### Connection example
+
+```python
+from pymbrewclient import BreweryClient
+
+client = BreweryClient(username="you@example.com", *****)
+
+with client.create_mqtt_client() as mqtt:
+    mqtt.on_connected(lambda: print("Connected"))
+    mqtt.on_disconnected(lambda: print("Disconnected"))
+    mqtt.on_reconnecting(lambda: print("Reconnecting..."))
+    mqtt.on_error(lambda err: print(f"Error: {err}"))
+
+    mqtt.subscribe_device_logs("7391Q4827-5NZC8R2M")
+
+    import time
+    time.sleep(30)
+```
+
+### Raw-message example
+
+```python
+from pymbrewclient.mqtt.models import MqttMessage
+
+with client.create_mqtt_client() as mqtt:
+    def handle(msg: MqttMessage) -> None:
+        print(msg.topic, msg.received_at, msg.payload.hex())
+
+    mqtt.on_message(handle)
+    mqtt.subscribe_device_logs("7391Q4827-5NZC8R2M")
+    import time; time.sleep(30)
+```
+
+### Decoded telemetry example
+
+```python
+from pymbrewclient.mqtt.models import DeviceLogMessage
+
+with client.create_mqtt_client() as mqtt:
+    def handle_log(msg: DeviceLogMessage) -> None:
+        if msg.decode_error:
+            print(f"Decode error: {msg.decode_error}")
+            return
+        print(f"Session {msg.session_id}")
+        print(f"Process state: {msg.process_state}")
+        print(f"Current temp: {msg.current_temperature}°C")
+        print(f"Target temp:  {msg.target_temperature}°C")
+        print(f"Wi-Fi RSSI:  {msg.wifi_rssi_dbm} dBm")
+        if msg.next_action_at:
+            print(f"Next action: {msg.next_action_at.isoformat()}")
+        for measurement_id, value in msg.measurements.items():
+            print(f"Measurement {measurement_id}: {value}")
+
+    mqtt.on_device_log(handle_log)
+    mqtt.subscribe_device_logs("7391Q4827-5NZC8R2M")
+    import time; time.sleep(30)
+```
+
+### Limitations: protobuf schema
+
+MiniBrew's official protobuf schema (`minibrew/minibrew-protobuf`) is a private
+repository that is not publicly accessible. The fields exposed directly on
+`DeviceLogMessage` were reconstructed from captured device traffic and compared
+with the MiniBrew REST API response structure.
+
+Unknown nested state values are exposed through `DeviceLogMessage.state_fields`.
+Confirmed measurement ID 24 is also exposed as `DeviceLogMessage.wifi_rssi_dbm`;
+all readings, including measurements whose semantics remain unconfirmed, stay
+available by numeric ID in `DeviceLogMessage.measurements`. The raw `payload`
+bytes are always preserved in `MqttMessage.payload` and
+`DeviceLogMessage.payload`. To inspect a live message:
+
+```bash
+protoc --decode_raw < captured_payload.bin
+```
+
+Live MQTT messages contain an envelope around the telemetry message.
+`DeviceLogMessage.raw_fields` exposes that envelope, while
+`DeviceLogMessage.telemetry_fields` exposes the nested telemetry fields.
+Telemetry field 26 is the countdown in seconds to the next required action;
+`DeviceLogMessage.next_action_at` adds it to the device timestamp and returns a
+timezone-aware UTC datetime. Unconfirmed fields, including telemetry fields 8
+and 30, remain available without speculative semantic names.
+
+The CLI prints curated decoded telemetry by default, excluding the binary
+payload, numeric measurement map, and protobuf field maps. Confirmed named
+measurements such as `wifi_rssi_dbm` remain visible:
+
+```bash
+pymbrewclient watch-device-logs \
+  --username you@example.com \
+  --password 'your-password' \
+  --serial 7391Q4827-5NZC8R2M
+```
+
+Add `--debug` to include the complete numeric `measurements` map, raw payload,
+`raw_fields`, `telemetry_fields`, and `state_fields`:
+
+```bash
+pymbrewclient watch-device-logs \
+  --username you@example.com \
+  --password 'your-password' \
+  --serial 7391Q4827-5NZC8R2M \
+  --debug
+```
