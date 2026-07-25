@@ -54,6 +54,7 @@ from types import TracebackType
 from typing import Any
 
 import paho.mqtt.client as _paho
+from requests.certs import where as requests_ca_bundle
 
 from .models import DeviceLogMessage, MqttMessage
 from .proto import decode_device_log
@@ -167,7 +168,7 @@ class MqttClient:
             clean_session=True,
         )
         client.ws_set_options(path=WS_PATH)
-        client.tls_set()  # TLS with system CA bundle; certificate verification enabled
+        client.tls_set(ca_certs=requests_ca_bundle())
         client.username_pw_set(self._username, self._api_token)
         client.will_set(topic=will_topic, payload="offline", qos=0, retain=False)
         client.reconnect_delay_set(min_delay=RECONNECT_DELAY, max_delay=RECONNECT_DELAY)

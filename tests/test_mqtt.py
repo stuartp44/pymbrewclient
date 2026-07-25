@@ -1,6 +1,6 @@
 import struct
 import unittest
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -15,6 +15,7 @@ from pymbrewclient.mqtt.client import (
 )
 from pymbrewclient.mqtt.models import DeviceLogMessage, MqttMessage
 from pymbrewclient.mqtt.proto import decode_device_log, decode_raw_fields
+from requests.certs import where as requests_ca_bundle
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -38,24 +39,31 @@ def _encode_float32(value: float) -> bytes:
 
 def _build_device_log_payload(
     session_id: int = 12345,
-    device_timestamp: int = 1721993600,
+    device_timestamp_ms: int = 1721993600000,
+    current_state: int = 1,
+    process_type: int = 4,
     process_state: int = 80,
     user_action: int = 0,
     current_temperature: float = 15.1,
     target_temperature: float = 14.91,
-    remaining_duration_seconds: int = 4607,
-    seconds_until_next_action: int = 300,
+    unknown_field_8: int = 4607,
+    unknown_field_30: int = 300,
 ) -> bytes:
-    """Build a minimal valid protobuf payload matching the best-effort schema."""
+    """Build a minimal valid protobuf payload matching the observed schema."""
+    state = b""
+    state += _encode_varint((1 << 3) | 0) + _encode_varint(current_state)
+    state += _encode_varint((2 << 3) | 0) + _encode_varint(process_type)
+    state += _encode_varint((3 << 3) | 0) + _encode_varint(process_state)
+    state += _encode_varint((8 << 3) | 0) + _encode_varint(user_action)
+
     data = b""
-    data += _encode_varint((1 << 3) | 0) + _encode_varint(session_id)
-    data += _encode_varint((2 << 3) | 0) + _encode_varint(device_timestamp)
-    data += _encode_varint((3 << 3) | 0) + _encode_varint(process_state)
-    data += _encode_varint((4 << 3) | 0) + _encode_varint(user_action)
-    data += _encode_varint((5 << 3) | 5) + _encode_float32(current_temperature)
-    data += _encode_varint((6 << 3) | 5) + _encode_float32(target_temperature)
-    data += _encode_varint((7 << 3) | 0) + _encode_varint(remaining_duration_seconds)
-    data += _encode_varint((8 << 3) | 0) + _encode_varint(seconds_until_next_action)
+    data += _encode_varint((1 << 3) | 0) + _encode_varint(device_timestamp_ms)
+    data += _encode_varint((2 << 3) | 2) + _encode_varint(len(state)) + state
+    data += _encode_varint((8 << 3) | 0) + _encode_varint(unknown_field_8)
+    data += _encode_varint((11 << 3) | 0) + _encode_varint(session_id)
+    data += _encode_varint((18 << 3) | 5) + _encode_float32(target_temperature)
+    data += _encode_varint((19 << 3) | 5) + _encode_float32(current_temperature)
+    data += _encode_varint((30 << 3) | 0) + _encode_varint(unknown_field_30)
     return data
 
 
@@ -170,7 +178,8 @@ class TestMqttBrokerConfiguration(unittest.TestCase):
             mock_paho = MagicMock()
             mock_cls.return_value = mock_paho
             MqttClient(api_token="t", user_uuid="u")
-        mock_paho.tls_set.assert_called_once_with()
+        mock_paho.tls_set.assert_called_once_with(ca_certs=requests_ca_bundle())
+        mock_paho.tls_insecure_set.assert_not_called()
 
     def test_ws_path_is_set(self) -> None:
         with patch("pymbrewclient.mqtt.client._paho.Client") as mock_cls:
@@ -470,11 +479,11 @@ class TestRawMessageCallback(unittest.TestCase):
 
 
 class TestDeviceLogFixtureParsing(unittest.TestCase):
-    """Parse the captured binary device-log fixture from tests/fixtures/."""
+    """Parse a captured device-log payload from tests/fixtures/."""
 
     def setUp(self) -> None:
-        fixture_path = FIXTURES_DIR / "device_log.bin"
-        self.payload = fixture_path.read_bytes()
+        fixture_path = FIXTURES_DIR / "device_log.hex"
+        self.payload = bytes.fromhex(fixture_path.read_text().strip())
 
     def test_fixture_file_exists_and_is_nonempty(self) -> None:
         self.assertGreater(len(self.payload), 0)
@@ -482,13 +491,22 @@ class TestDeviceLogFixtureParsing(unittest.TestCase):
     def test_decode_session_id(self) -> None:
         msg = _make_mqtt_message("devices/logs/test-dev", self.payload)
         decoded = decode_device_log(msg)
-        self.assertEqual(decoded.session_id, 12345)
+        self.assertEqual(decoded.session_id, 80851)
 
     def test_decode_device_timestamp(self) -> None:
         msg = _make_mqtt_message("devices/logs/test-dev", self.payload)
         decoded = decode_device_log(msg)
-        expected = datetime.fromtimestamp(1721993600, tz=timezone.utc)
+        expected = datetime(2026, 7, 25, 19, 58, 43, 644000, tzinfo=timezone.utc)
         self.assertEqual(decoded.device_timestamp, expected)
+
+    def test_decode_nested_state(self) -> None:
+        msg = _make_mqtt_message("devices/logs/test-dev", self.payload)
+        decoded = decode_device_log(msg)
+        self.assertEqual(decoded.current_state, 1)
+        self.assertEqual(decoded.process_type, 4)
+        self.assertEqual(decoded.process_state, 80)
+        self.assertEqual(decoded.user_action, 0)
+        self.assertEqual(decoded.state_fields[7], [b"-"])
 
     def test_decode_process_state(self) -> None:
         msg = _make_mqtt_message("devices/logs/test-dev", self.payload)
@@ -504,23 +522,43 @@ class TestDeviceLogFixtureParsing(unittest.TestCase):
         msg = _make_mqtt_message("devices/logs/test-dev", self.payload)
         decoded = decode_device_log(msg)
         self.assertIsNotNone(decoded.current_temperature)
-        self.assertAlmostEqual(decoded.current_temperature, 15.1, places=2)
+        self.assertAlmostEqual(decoded.current_temperature, 19.3, places=2)
 
     def test_decode_target_temperature(self) -> None:
         msg = _make_mqtt_message("devices/logs/test-dev", self.payload)
         decoded = decode_device_log(msg)
         self.assertIsNotNone(decoded.target_temperature)
-        self.assertAlmostEqual(decoded.target_temperature, 14.91, places=2)
+        self.assertAlmostEqual(decoded.target_temperature, 19.0, places=2)
 
-    def test_decode_remaining_duration_seconds(self) -> None:
+    def test_decode_next_action(self) -> None:
+        decoded = decode_device_log(_make_mqtt_message("devices/logs/test-dev", self.payload))
+        self.assertEqual(decoded.seconds_until_next_action, 851903)
+        expected = datetime(2026, 8, 4, 16, 37, 6, 644000, tzinfo=timezone.utc)
+        self.assertEqual(decoded.next_action_at, expected)
+
+    def test_decode_measurements_preserves_all_sensor_ids(self) -> None:
         msg = _make_mqtt_message("devices/logs/test-dev", self.payload)
         decoded = decode_device_log(msg)
-        self.assertEqual(decoded.remaining_duration_seconds, 4607)
+        expected = {
+            0: 27.3,
+            3: 19.3,
+            4: 18.2,
+            13: 121.0,
+            19: 0.0,
+            21: 0.0,
+            22: 0.0,
+            23: 0.0,
+            24: -45.0,
+            26: 100.0,
+            27: 0.0,
+        }
+        self.assertEqual(decoded.measurements.keys(), expected.keys())
+        for measurement_id, value in expected.items():
+            self.assertAlmostEqual(decoded.measurements[measurement_id], value, places=2)
 
-    def test_decode_seconds_until_next_action(self) -> None:
-        msg = _make_mqtt_message("devices/logs/test-dev", self.payload)
-        decoded = decode_device_log(msg)
-        self.assertEqual(decoded.seconds_until_next_action, 300)
+    def test_decode_wifi_rssi(self) -> None:
+        decoded = decode_device_log(_make_mqtt_message("devices/logs/test-dev", self.payload))
+        self.assertEqual(decoded.wifi_rssi_dbm, -45.0)
 
     def test_raw_payload_is_preserved(self) -> None:
         msg = _make_mqtt_message("devices/logs/test-dev", self.payload)
@@ -532,38 +570,58 @@ class TestDeviceLogFixtureParsing(unittest.TestCase):
         decoded = decode_device_log(msg)
         self.assertIsNone(decoded.decode_error)
 
+    def test_mqtt_callback_delivers_decoded_captured_payload(self) -> None:
+        with patch("pymbrewclient.mqtt.client._paho.Client") as mock_cls:
+            mock_paho = MagicMock()
+            mock_cls.return_value = mock_paho
+            client = MqttClient(api_token="t", user_uuid="u")
 
-# ---------------------------------------------------------------------------
-# Next-action timestamp calculation
-# ---------------------------------------------------------------------------
+        received: list[DeviceLogMessage] = []
+        client.on_device_log(received.append)
+        mock_msg = MagicMock(topic="devices/logs/test-dev", payload=self.payload)
+        client._on_paho_message(mock_paho, None, mock_msg)
+
+        self.assertEqual(len(received), 1)
+        self.assertEqual(received[0].session_id, 80851)
+        self.assertEqual(received[0].process_state, 80)
+        self.assertAlmostEqual(received[0].measurements[3], 19.3, places=2)
 
 
-class TestNextActionTimestamp(unittest.TestCase):
-    def test_next_action_at_is_calculated_correctly(self) -> None:
-        payload = _build_device_log_payload(
-            device_timestamp=1721993600,
-            seconds_until_next_action=300,
-        )
-        msg = _make_mqtt_message("devices/logs/dev", payload)
-        decoded = decode_device_log(msg)
+class TestLiveDeviceLogEnvelopeParsing(unittest.TestCase):
+    """Parse the envelope received by the live MQTT watch command."""
 
-        expected_ts = datetime.fromtimestamp(1721993600, tz=timezone.utc) + timedelta(seconds=300)
-        self.assertEqual(decoded.next_action_at, expected_ts)
+    def setUp(self) -> None:
+        fixture_path = FIXTURES_DIR / "device_log_envelope.hex"
+        self.payload = bytes.fromhex(fixture_path.read_text().strip())
+        self.decoded = decode_device_log(_make_mqtt_message("devices/logs/test-dev", self.payload))
 
-    def test_next_action_at_is_none_when_timestamp_absent(self) -> None:
-        """next_action_at requires both device_timestamp and seconds_until_next_action."""
-        # Encode only seconds_until_next_action, omit device_timestamp
-        payload = _encode_varint((8 << 3) | 0) + _encode_varint(300)
-        msg = _make_mqtt_message("devices/logs/dev", payload)
-        decoded = decode_device_log(msg)
-        self.assertIsNone(decoded.next_action_at)
+    def test_decodes_envelope_metadata(self) -> None:
+        self.assertEqual(self.decoded.sequence_number, 24098)
+        self.assertEqual(self.decoded.session_id, 80851)
+        expected = datetime(2026, 7, 25, 20, 6, 0, 644000, tzinfo=timezone.utc)
+        self.assertEqual(self.decoded.device_timestamp, expected)
 
-    def test_next_action_at_is_utc(self) -> None:
-        payload = _build_device_log_payload(device_timestamp=1721993600, seconds_until_next_action=60)
-        msg = _make_mqtt_message("devices/logs/dev", payload)
-        decoded = decode_device_log(msg)
-        self.assertIsNotNone(decoded.next_action_at)
-        self.assertEqual(decoded.next_action_at.tzinfo, timezone.utc)
+    def test_decodes_nested_telemetry(self) -> None:
+        self.assertEqual(self.decoded.current_state, 1)
+        self.assertEqual(self.decoded.process_type, 4)
+        self.assertEqual(self.decoded.process_state, 80)
+        self.assertEqual(self.decoded.user_action, 0)
+        self.assertEqual(self.decoded.current_temperature, 19.2)
+        self.assertEqual(self.decoded.target_temperature, 19.0)
+        self.assertEqual(self.decoded.wifi_rssi_dbm, -36.0)
+        self.assertEqual(self.decoded.measurements[3], 19.2)
+        self.assertEqual(self.decoded.measurements[24], -36.0)
+
+    def test_decodes_next_action_matching_portal(self) -> None:
+        self.assertEqual(self.decoded.seconds_until_next_action, 851466)
+        expected = datetime(2026, 8, 4, 16, 37, 6, 644000, tzinfo=timezone.utc)
+        self.assertEqual(self.decoded.next_action_at, expected)
+
+    def test_preserves_envelope_and_telemetry_fields(self) -> None:
+        self.assertEqual(self.decoded.raw_fields[1], [24098])
+        self.assertIn(3, self.decoded.raw_fields)
+        self.assertEqual(self.decoded.telemetry_fields[11], [80851])
+        self.assertIsNone(self.decoded.decode_error)
 
 
 # ---------------------------------------------------------------------------
@@ -598,6 +656,32 @@ class TestMalformedProtoHandling(unittest.TestCase):
         decoded = decode_device_log(msg)
         self.assertIn(99, decoded.raw_fields)
         self.assertIsNone(decoded.decode_error)
+
+    def test_malformed_nested_state_sets_decode_error(self) -> None:
+        state = b"\x08"
+        payload = _encode_varint((2 << 3) | 2) + _encode_varint(len(state)) + state
+        decoded = decode_device_log(_make_mqtt_message("devices/logs/dev", payload))
+        self.assertIsNotNone(decoded.decode_error)
+        self.assertIn("Nested state decode failed", decoded.decode_error)
+
+    def test_malformed_measurement_sets_decode_error(self) -> None:
+        measurement = b"\x08"
+        payload = _encode_varint((3 << 3) | 2) + _encode_varint(len(measurement)) + measurement
+        decoded = decode_device_log(_make_mqtt_message("devices/logs/dev", payload))
+        self.assertIsNotNone(decoded.decode_error)
+        self.assertIn("Measurement decode failed", decoded.decode_error)
+
+    def test_malformed_live_envelope_sets_decode_error(self) -> None:
+        payload = (
+            _encode_varint((3 << 3) | 2)
+            + _encode_varint(1)
+            + b"\x08"
+            + _encode_varint((5 << 3) | 0)
+            + _encode_varint(1721993600000)
+        )
+        decoded = decode_device_log(_make_mqtt_message("devices/logs/dev", payload))
+        self.assertIsNotNone(decoded.decode_error)
+        self.assertIn("Telemetry decode failed", decoded.decode_error)
 
     def test_malformed_message_does_not_raise(self) -> None:
         """Decoding errors must never propagate as exceptions."""

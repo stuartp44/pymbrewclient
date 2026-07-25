@@ -204,12 +204,12 @@ class RestApiClient:
         :return: A UserProfile object containing the user UUID and profile data.
         """
         logger.debug("Fetching user profile...")
-        response = self.get("v1/profile")
+        response = self.get("v1/users/me")
         data = response.json()
         return UserProfile(
             uuid=data["uuid"],
             email=data.get("email"),
-            username=data.get("username"),
+            username=data.get("username") or data.get("display_name"),
             first_name=data.get("first_name"),
             last_name=data.get("last_name"),
         )

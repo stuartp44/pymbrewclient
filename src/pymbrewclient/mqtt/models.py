@@ -94,48 +94,53 @@ class DeviceLogMessage:
 
     # --- Decoded telemetry fields ----------------------------------------
 
+    sequence_number: int | None = None
+    """Per-device message sequence number from live envelope field 1."""
+
     session_id: int | None = None
-    """Active brewing session ID (protobuf field 1, best-effort)."""
+    """Active brewing session ID (live envelope field 4 or telemetry field 11)."""
 
     device_timestamp: datetime | None = None
     """
     Timezone-aware UTC datetime from the device's own clock
-    (protobuf field 2, best-effort).  Derived from a Unix epoch integer.
+    (live envelope field 5 or telemetry field 1). Derived from Unix epoch milliseconds.
     """
+
+    current_state: int | None = None
+    """Current device-state integer (nested state field 1, observed)."""
+
+    process_type: int | None = None
+    """Process-type integer (nested state field 2, observed)."""
 
     process_state: int | None = None
     """
-    Process state integer (protobuf field 3, best-effort).
+    Process-state integer (nested state field 3, observed).
     See ``PROCESS_STATE_LABELS`` in the MiniBrew community docs for a
     complete mapping (e.g. 80 → FERMENTATION_TEMP_CONTROL).
     """
 
     user_action: int | None = None
     """
-    User-action state integer (protobuf field 4, best-effort).
+    User-action state integer (nested state field 8, observed).
     See ``USER_ACTION_LABELS`` in the MiniBrew community docs.
     """
 
     current_temperature: float | None = None
-    """Current temperature in °C (protobuf field 5, best-effort)."""
+    """Current temperature in °C (telemetry field 19, observed)."""
 
     target_temperature: float | None = None
-    """Target temperature in °C (protobuf field 6, best-effort)."""
+    """Target temperature in °C (telemetry field 18, observed)."""
 
-    remaining_duration_seconds: int | None = None
-    """Remaining process duration in seconds (protobuf field 7, best-effort)."""
+    wifi_rssi_dbm: float | None = None
+    """Wi-Fi received signal strength in dBm (measurement ID 24, confirmed)."""
 
     seconds_until_next_action: int | None = None
-    """Seconds until the next scheduled action (protobuf field 8, best-effort)."""
+    """Seconds until the next required user action (telemetry field 26, observed)."""
 
     next_action_at: datetime | None = None
     """
-    Calculated UTC datetime of the next scheduled action::
-
-        next_action_at = device_timestamp + timedelta(seconds=seconds_until_next_action)
-
-    ``None`` when either :attr:`device_timestamp` or
-    :attr:`seconds_until_next_action` is absent.
+    Timezone-aware UTC datetime calculated from :attr:`device_timestamp` plus
+    :attr:`seconds_until_next_action`.
     """
 
     decode_error: str | None = None
@@ -147,7 +152,26 @@ class DeviceLogMessage:
 
     raw_fields: dict[int, list[object]] = field(default_factory=dict)
     """
-    All raw protobuf field numbers and their decoded wire values, as
-    returned by the wire-format decoder.  Useful for inspecting an
-    unrecognised schema or verifying field-number assignments.
+    Raw fields from the MQTT payload's outermost protobuf message.
+    For live wrapped messages these are the envelope fields.
+    """
+
+    telemetry_fields: dict[int, list[object]] = field(default_factory=dict)
+    """
+    Raw fields from the decoded telemetry message. For an unwrapped telemetry
+    payload this is equal to :attr:`raw_fields`; for a live envelope it is
+    decoded from envelope field 3.
+    """
+
+    state_fields: dict[int, list[object]] = field(default_factory=dict)
+    """
+    Raw fields decoded from the nested state message in telemetry field 2.
+    This preserves observed but not yet semantically identified state values.
+    """
+
+    measurements: dict[int, float] = field(default_factory=dict)
+    """
+    Measurement ID to float value from repeated telemetry field 3 entries.
+    Confirmed IDs are also exposed as named fields; all readings remain here
+    so unknown measurements are preserved.
     """

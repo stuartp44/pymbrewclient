@@ -47,6 +47,7 @@ from rich import print as rich_print
 from rich.pretty import Pretty
 
 from pymbrewclient.client import BreweryClient, BreweryClientError
+from pymbrewclient.mqtt.models import DeviceLogMessage
 from pymbrewclient.rest.client import RestApiClient
 from pymbrewclient.rest.models import Device, datetime_to_api_string, format_duration
 
@@ -100,6 +101,29 @@ def print_output(data: BaseModel | dict | list, format: str) -> None:
         typer.echo(json.dumps(serialized_data, indent=4))
     else:
         rich_print(Pretty(serialized_data))
+
+
+def curate_device_log_output(msg: DeviceLogMessage) -> dict[str, object]:
+    """Return useful decoded telemetry without verbose protobuf internals."""
+    curated = {
+        "topic": msg.topic,
+        "received_at": msg.received_at,
+        "device_uuid": msg.device_uuid,
+        "sequence_number": msg.sequence_number,
+        "session_id": msg.session_id,
+        "device_timestamp": msg.device_timestamp,
+        "current_state": msg.current_state,
+        "process_type": msg.process_type,
+        "process_state": msg.process_state,
+        "user_action": msg.user_action,
+        "current_temperature": msg.current_temperature,
+        "target_temperature": msg.target_temperature,
+        "wifi_rssi_dbm": msg.wifi_rssi_dbm,
+        "seconds_until_next_action": msg.seconds_until_next_action,
+        "next_action_at": msg.next_action_at,
+        "decode_error": msg.decode_error,
+    }
+    return {key: value for key, value in curated.items() if value is not None}
 
 
 def setup_logging(level: str) -> None:
@@ -344,6 +368,11 @@ def watch_device_logs(
     duration: int | None = typer.Option(
         None, "--duration", help="Stop automatically after this many seconds (default: run until Ctrl+C)."
     ),
+    debug: bool = typer.Option(
+        False,
+        "--debug",
+        help="Include the raw payload and all decoded protobuf fields.",
+    ),
 ) -> None:
     """Stream real-time MQTT device telemetry logs for one or more devices."""
     if not serials:
@@ -365,8 +394,9 @@ def watch_device_logs(
             def on_error(exc: Exception) -> None:
                 typer.echo(f"MQTT error: {exc}")
 
-            def on_device_log(msg: object) -> None:
-                print_output(msg, output_format.lower())
+            def on_device_log(msg: DeviceLogMessage) -> None:
+                output = msg if debug else curate_device_log_output(msg)
+                print_output(output, output_format.lower())
 
             mqtt.on_connected(on_connected)
             mqtt.on_disconnected(on_disconnected)

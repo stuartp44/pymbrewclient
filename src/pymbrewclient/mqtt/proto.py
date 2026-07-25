@@ -52,19 +52,26 @@ Schema caveat
 
     To dump a live message: ``protoc --decode_raw < captured_payload.bin``
 
-Field mapping (best-effort)
-    =========  ==============================  ==========
+Observed telemetry structure
+    =========  ==============================  ============================
     Field No.  Name                            Wire type
-    =========  ==============================  ==========
-    1          session_id                      varint (int32)
-    2          device_timestamp                varint (int64, Unix epoch s)
-    3          process_state                   varint (int32)
-    4          user_action                     varint (int32)
-    5          current_temperature             32-bit (float32)
-    6          target_temperature              32-bit (float32)
-    7          remaining_duration_seconds      varint (int32)
-    8          seconds_until_next_action       varint (int32)
-    =========  ==============================  ==========
+    =========  ==============================  ============================
+    1          device_timestamp                varint (Unix epoch ms)
+    2          state                           nested message
+    3          measurements                    repeated nested ``{id,float}``
+    11         session_id                      varint
+    18         target_temperature              32-bit float
+    19         current_temperature             32-bit float
+    26         seconds_until_next_action       varint
+    =========  ==============================  ============================
+
+The nested state message has observed fields 1 (current state), 2 (process
+type), 3 (process state), and 8 (user action). Unknown outer, state, and
+measurement fields remain available without speculative names.
+
+Live broker messages wrap this telemetry message in an envelope with field 1
+(sequence number), field 3 (nested telemetry), field 4 (session ID), and field
+5 (Unix epoch milliseconds).
 """
 
 import struct
@@ -176,17 +183,47 @@ def _first_float32(raw: dict[int, list[object]], field_num: int) -> float | None
     """Return the first 32-bit float value for *field_num*, or ``None``."""
     values = raw.get(field_num)
     if values and isinstance(values[0], (bytes, bytearray)) and len(values[0]) == 4:
-        return struct.unpack("<f", values[0])[0]
+        return round(struct.unpack("<f", values[0])[0], 4)
     return None
+
+
+def _first_bytes(raw: dict[int, list[object]], field_num: int) -> bytes | None:
+    """Return the first length-delimited value for *field_num*, or ``None``."""
+    values = raw.get(field_num)
+    if values and isinstance(values[0], bytes):
+        return values[0]
+    return None
+
+
+def _decode_measurements(raw: dict[int, list[object]]) -> dict[int, float]:
+    """Decode repeated outer field 3 entries as measurement ID/value pairs."""
+    measurements: dict[int, float] = {}
+    for value in raw.get(3, []):
+        if not isinstance(value, bytes):
+            continue
+        entry = decode_raw_fields(value)
+        measurement_id = _first_varint(entry, 1)
+        measurement_value = _first_float32(entry, 2)
+        if measurement_id is not None and measurement_value is not None:
+            measurements[measurement_id] = measurement_value
+    return measurements
+
+
+def _unwrap_telemetry(raw: dict[int, list[object]]) -> tuple[dict[int, list[object]], bool]:
+    """Return telemetry fields and whether the payload used the live envelope."""
+    nested = _first_bytes(raw, 3)
+    if _first_varint(raw, 5) is None or nested is None:
+        return raw, False
+    return decode_raw_fields(nested), True
 
 
 def decode_device_log(msg: MqttMessage) -> DeviceLogMessage:
     """Attempt to decode a ``devices/logs/`` MQTT message as a DeviceLog.
 
-    On any decoding error the returned :class:`~pymbrewclient.mqtt.models.DeviceLogMessage`
-    will have :attr:`~pymbrewclient.mqtt.models.DeviceLogMessage.decode_error` set and all
-    telemetry fields will be ``None``.  The raw :attr:`~pymbrewclient.mqtt.models.MqttMessage.payload`
-    is always preserved.
+    On a decoding error the returned :class:`~pymbrewclient.mqtt.models.DeviceLogMessage`
+    has :attr:`~pymbrewclient.mqtt.models.DeviceLogMessage.decode_error` set. Fields decoded
+    before a nested-message error remain available. The raw
+    :attr:`~pymbrewclient.mqtt.models.MqttMessage.payload` is always preserved.
 
     :param msg: The raw :class:`~pymbrewclient.mqtt.models.MqttMessage` to decode.
     :returns: A populated :class:`~pymbrewclient.mqtt.models.DeviceLogMessage`.
@@ -200,27 +237,56 @@ def decode_device_log(msg: MqttMessage) -> DeviceLogMessage:
 
     try:
         raw = decode_raw_fields(msg.payload)
-    except Exception as exc:  # noqa: BLE001
+    except ValueError as exc:
         base.decode_error = f"Wire decode failed: {exc}"
         return base
 
     base.raw_fields = raw
 
-    # --- Best-effort field mapping (field numbers not officially confirmed) --
+    try:
+        telemetry, is_wrapped = _unwrap_telemetry(raw)
+    except ValueError as exc:
+        base.decode_error = f"Telemetry decode failed: {exc}"
+        return base
 
-    base.session_id = _first_varint(raw, 1)
+    base.telemetry_fields = telemetry
 
-    ts_int = _first_varint(raw, 2)
-    if ts_int is not None:
-        base.device_timestamp = datetime.fromtimestamp(ts_int, tz=timezone.utc)
+    # Confirmed from captured device traffic.
+    if is_wrapped:
+        base.sequence_number = _first_varint(raw, 1)
+        base.session_id = _first_varint(raw, 4)
+        timestamp_ms = _first_varint(raw, 5)
+    else:
+        base.session_id = _first_varint(telemetry, 11)
+        timestamp_ms = _first_varint(telemetry, 1)
 
-    base.process_state = _first_varint(raw, 3)
-    base.user_action = _first_varint(raw, 4)
-    base.current_temperature = _first_float32(raw, 5)
-    base.target_temperature = _first_float32(raw, 6)
-    base.remaining_duration_seconds = _first_varint(raw, 7)
-    base.seconds_until_next_action = _first_varint(raw, 8)
+    if timestamp_ms is not None:
+        try:
+            base.device_timestamp = datetime.fromtimestamp(timestamp_ms / 1000, tz=timezone.utc)
+        except (OSError, OverflowError, ValueError) as exc:
+            base.decode_error = f"Invalid device timestamp: {exc}"
 
+    state_payload = _first_bytes(telemetry, 2)
+    if state_payload is not None:
+        try:
+            base.state_fields = decode_raw_fields(state_payload)
+        except ValueError as exc:
+            base.decode_error = f"Nested state decode failed: {exc}"
+        else:
+            base.current_state = _first_varint(base.state_fields, 1)
+            base.process_type = _first_varint(base.state_fields, 2)
+            base.process_state = _first_varint(base.state_fields, 3)
+            base.user_action = _first_varint(base.state_fields, 8)
+
+    try:
+        base.measurements = _decode_measurements(telemetry)
+    except ValueError as exc:
+        base.decode_error = f"Measurement decode failed: {exc}"
+
+    base.wifi_rssi_dbm = base.measurements.get(24)
+    base.current_temperature = _first_float32(telemetry, 19)
+    base.target_temperature = _first_float32(telemetry, 18)
+    base.seconds_until_next_action = _first_varint(telemetry, 26)
     if base.device_timestamp is not None and base.seconds_until_next_action is not None:
         base.next_action_at = base.device_timestamp + timedelta(seconds=base.seconds_until_next_action)
 

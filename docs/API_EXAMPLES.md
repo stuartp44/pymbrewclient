@@ -223,52 +223,61 @@ with client.create_mqtt_client() as mqtt:
         print(f"Process state: {msg.process_state}")
         print(f"Current temp: {msg.current_temperature}°C")
         print(f"Target temp:  {msg.target_temperature}°C")
-
-    mqtt.on_device_log(handle_log)
-    mqtt.subscribe_device_logs("7391Q4827-5NZC8R2M")
-    import time; time.sleep(30)
-```
-
-### `next_action_at` example
-
-```python
-with client.create_mqtt_client() as mqtt:
-    def handle_log(msg: DeviceLogMessage) -> None:
+        print(f"Wi-Fi RSSI:  {msg.wifi_rssi_dbm} dBm")
         if msg.next_action_at:
-            print(f"Next action at (UTC): {msg.next_action_at.isoformat()}")
-            # Home Assistant can display this UTC timestamp in the user's local timezone.
+            print(f"Next action: {msg.next_action_at.isoformat()}")
+        for measurement_id, value in msg.measurements.items():
+            print(f"Measurement {measurement_id}: {value}")
 
     mqtt.on_device_log(handle_log)
     mqtt.subscribe_device_logs("7391Q4827-5NZC8R2M")
     import time; time.sleep(30)
 ```
-
-`next_action_at` is calculated as:
-
-```python
-next_action_at = message_timestamp + timedelta(seconds=seconds_until_next_action)
-```
-
-It is always a timezone-aware UTC `datetime`.  No local timezone conversion is
-applied inside the library; downstream consumers (such as Home Assistant) should
-handle display timezone conversion.
 
 ### Limitations: protobuf schema
 
 MiniBrew's official protobuf schema (`minibrew/minibrew-protobuf`) is a private
-repository that is not publicly accessible.  The field numbers used in
-`DeviceLogMessage` were **reconstructed** from:
+repository that is not publicly accessible. The fields exposed directly on
+`DeviceLogMessage` were reconstructed from captured device traffic and compared
+with the MiniBrew REST API response structure.
 
-- The MiniBrew REST API response structure (`Device` dataclass field names)
-- The community-maintained `minibrew/enduser-docker-server` project documentation
-
-**Until official field numbers are confirmed, decoded telemetry values may be
-incorrect.**  The raw `payload` bytes are always preserved in `MqttMessage.payload`
-and `DeviceLogMessage.payload`.  To inspect a live message yourself:
+Unknown nested state values are exposed through `DeviceLogMessage.state_fields`.
+Confirmed measurement ID 24 is also exposed as `DeviceLogMessage.wifi_rssi_dbm`;
+all readings, including measurements whose semantics remain unconfirmed, stay
+available by numeric ID in `DeviceLogMessage.measurements`. The raw `payload`
+bytes are always preserved in `MqttMessage.payload` and
+`DeviceLogMessage.payload`. To inspect a live message:
 
 ```bash
 protoc --decode_raw < captured_payload.bin
 ```
 
-The raw field numbers are also exposed via `DeviceLogMessage.raw_fields` for
-inspection without any mapping.
+Live MQTT messages contain an envelope around the telemetry message.
+`DeviceLogMessage.raw_fields` exposes that envelope, while
+`DeviceLogMessage.telemetry_fields` exposes the nested telemetry fields.
+Telemetry field 26 is the countdown in seconds to the next required action;
+`DeviceLogMessage.next_action_at` adds it to the device timestamp and returns a
+timezone-aware UTC datetime. Unconfirmed fields, including telemetry fields 8
+and 30, remain available without speculative semantic names.
+
+The CLI prints curated decoded telemetry by default, excluding the binary
+payload, numeric measurement map, and protobuf field maps. Confirmed named
+measurements such as `wifi_rssi_dbm` remain visible:
+
+```bash
+pymbrewclient watch-device-logs \
+  --username you@example.com \
+  --password 'your-password' \
+  --serial 7391Q4827-5NZC8R2M
+```
+
+Add `--debug` to include the complete numeric `measurements` map, raw payload,
+`raw_fields`, `telemetry_fields`, and `state_fields`:
+
+```bash
+pymbrewclient watch-device-logs \
+  --username you@example.com \
+  --password 'your-password' \
+  --serial 7391Q4827-5NZC8R2M \
+  --debug
+```
