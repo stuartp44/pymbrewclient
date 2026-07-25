@@ -38,6 +38,7 @@ from dataclasses import asdict, is_dataclass
 from datetime import datetime
 import json
 import logging
+import threading
 from typing import Annotated
 
 import typer
@@ -74,6 +75,8 @@ def serialize_output(data: object) -> object:
         return serialize_output(data.dict())
     if isinstance(data, datetime):
         return datetime_to_api_string(data)
+    if isinstance(data, bytes):
+        return data.hex()
     if isinstance(data, Device):
         return data.to_dict()
     if is_dataclass(data):
@@ -325,6 +328,66 @@ def process_estimate(
     except Exception as e:
         logger.error(f"Error fetching process estimate: {e}")
         typer.echo(f"Error fetching process estimate: {e}")
+        raise typer.Exit(code=1)
+
+
+@app.command()
+def watch_device_logs(
+    username: str = typer.Option(..., "--username", help="The username for authentication."),
+    password: str = typer.Option(..., "--password", help="The password for authentication."),
+    base_url: str = typer.Option(base_url, "--base-url", help="The base URL for the API."),
+    serials: Annotated[
+        list[str],
+        typer.Option("--serial", help="Device serial number to watch (can be specified multiple times)."),
+    ] = [],
+    output_format: str = typer.Option("pretty", "--format", help="Output format: pretty or json."),
+    duration: int | None = typer.Option(
+        None, "--duration", help="Stop automatically after this many seconds (default: run until Ctrl+C)."
+    ),
+) -> None:
+    """Stream real-time MQTT device telemetry logs for one or more devices."""
+    if not serials:
+        typer.echo("Error: at least one --serial is required.")
+        raise typer.Exit(code=1)
+
+    try:
+        client = initialize_brewery_client(base_url, username, password)
+        stop_event = threading.Event()
+
+        with client.create_mqtt_client() as mqtt:
+
+            def on_connected() -> None:
+                typer.echo(f"Connected. Watching: {', '.join(serials)}")
+
+            def on_disconnected() -> None:
+                typer.echo("Disconnected.")
+
+            def on_error(exc: Exception) -> None:
+                typer.echo(f"MQTT error: {exc}")
+
+            def on_device_log(msg: object) -> None:
+                print_output(msg, output_format.lower())
+
+            mqtt.on_connected(on_connected)
+            mqtt.on_disconnected(on_disconnected)
+            mqtt.on_error(on_error)
+            mqtt.on_device_log(on_device_log)
+
+            for serial in serials:
+                mqtt.subscribe_device_logs(serial)
+
+            try:
+                stop_event.wait(timeout=duration)
+            except KeyboardInterrupt:
+                typer.echo("\nStopping...")
+
+    except BreweryClientError as e:
+        logger.error(f"Error: {e}")
+        typer.echo(f"Error: {e}")
+        raise typer.Exit(code=1)
+    except Exception as e:
+        logger.error(f"Error: {e}")
+        typer.echo(f"Error: {e}")
         raise typer.Exit(code=1)
 
 

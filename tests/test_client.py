@@ -453,6 +453,130 @@ class TestCli(unittest.TestCase):
         self.assertEqual(payload["process_estimate_remaining_seconds"], 4607)
         self.assertEqual(payload["process_estimate_remaining_formatted"], "1:16:47")
 
+    def test_watch_device_logs_requires_serial(self) -> None:
+        runner = CliRunner()
+        result = runner.invoke(
+            app,
+            ["watch-device-logs", "--username", "user", "--password", "pass"],
+        )
+        self.assertNotEqual(result.exit_code, 0)
+        self.assertIn("--serial", result.stdout)
+
+    def test_watch_device_logs_streams_messages_as_json(self) -> None:
+        """Connect, receive one device-log message, then stop via --duration 0."""
+        from datetime import datetime, timezone
+
+        from pymbrewclient.mqtt.models import DeviceLogMessage
+
+        runner = CliRunner()
+
+        sample_msg = DeviceLogMessage(
+            topic="devices/logs/SER-001",
+            payload=b"\x08\x01",
+            received_at=datetime(2024, 7, 26, 12, 0, 0, tzinfo=timezone.utc),
+            device_uuid="SER-001",
+            session_id=1,
+            process_state=80,
+            current_temperature=15.0,
+        )
+
+        mock_mqtt = MagicMock()
+        mock_mqtt.__enter__ = MagicMock(return_value=mock_mqtt)
+        mock_mqtt.__exit__ = MagicMock(return_value=False)
+
+        # Capture the on_device_log callback so we can invoke it synchronously
+        device_log_callbacks: list = []
+
+        def capture_on_device_log(cb: object) -> None:
+            device_log_callbacks.append(cb)
+
+        mock_mqtt.on_device_log.side_effect = capture_on_device_log
+
+        mock_client = MagicMock()
+        mock_client.create_mqtt_client.return_value = mock_mqtt
+
+        def fake_wait(event: object, timeout: object = None) -> bool:  # type: ignore[override]
+            for cb in device_log_callbacks:
+                cb(sample_msg)
+            return True
+
+        with (
+            patch("pymbrewclient.cli.initialize_brewery_client", return_value=mock_client),
+            patch("threading.Event.wait", fake_wait),
+        ):
+            result = runner.invoke(
+                app,
+                [
+                    "watch-device-logs",
+                    "--username",
+                    "user",
+                    "--password",
+                    "pass",
+                    "--serial",
+                    "SER-001",
+                    "--format",
+                    "json",
+                    "--duration",
+                    "0",
+                ],
+            )
+
+        self.assertEqual(result.exit_code, 0, result.stdout)
+        # Find the JSON object in stdout (there may be preceding non-JSON lines)
+        decoder = json.JSONDecoder()
+        json_start = result.stdout.find("{")
+        self.assertGreater(json_start, -1, f"No JSON object found in: {result.stdout!r}")
+        payload, _ = decoder.raw_decode(result.stdout, json_start)
+        self.assertEqual(payload["device_uuid"], "SER-001")
+        self.assertEqual(payload["session_id"], 1)
+        self.assertEqual(payload["process_state"], 80)
+        self.assertEqual(payload["payload"], b"\x08\x01".hex())
+
+    def test_watch_device_logs_subscribes_all_serials(self) -> None:
+        """Each --serial value is subscribed on the MQTT client."""
+        runner = CliRunner()
+
+        mock_mqtt = MagicMock()
+        mock_mqtt.__enter__ = MagicMock(return_value=mock_mqtt)
+        mock_mqtt.__exit__ = MagicMock(return_value=False)
+
+        mock_client = MagicMock()
+        mock_client.create_mqtt_client.return_value = mock_mqtt
+
+        with (
+            patch("pymbrewclient.cli.initialize_brewery_client", return_value=mock_client),
+            patch("threading.Event.wait", return_value=True),
+        ):
+            result = runner.invoke(
+                app,
+                [
+                    "watch-device-logs",
+                    "--username",
+                    "user",
+                    "--password",
+                    "pass",
+                    "--serial",
+                    "SER-001",
+                    "--serial",
+                    "SER-002",
+                    "--duration",
+                    "0",
+                ],
+            )
+
+        self.assertEqual(result.exit_code, 0, result.stdout)
+        subscribed = {call.args[0] for call in mock_mqtt.subscribe_device_logs.call_args_list}
+        self.assertIn("SER-001", subscribed)
+        self.assertIn("SER-002", subscribed)
+
+    def test_serialize_output_converts_bytes_to_hex(self) -> None:
+        from pymbrewclient.cli import serialize_output
+
+        self.assertEqual(serialize_output(b"\xde\xad\xbe\xef"), "deadbeef")
+        self.assertEqual(serialize_output(b""), "")
+        result = serialize_output({"payload": b"\x01\x02"})
+        self.assertEqual(result, {"payload": "0102"})
+
 
 if __name__ == "__main__":
     unittest.main()
