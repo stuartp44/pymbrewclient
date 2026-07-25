@@ -44,6 +44,7 @@ token**, include it in exception messages, or pass it to external systems.
 This module takes care to keep the token out of ``__repr__``, log output,
 and callback arguments.
 """
+
 import logging
 import threading
 import uuid

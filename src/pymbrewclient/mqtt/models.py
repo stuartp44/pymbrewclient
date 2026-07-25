@@ -37,6 +37,7 @@
 """
 Typed message models for the MiniBrew MQTT client.
 """
+
 from dataclasses import dataclass, field
 from datetime import datetime
 

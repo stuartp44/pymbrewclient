@@ -66,6 +66,7 @@ Field mapping (best-effort)
     8          seconds_until_next_action       varint (int32)
     =========  ==============================  ==========
 """
+
 import struct
 from datetime import datetime, timedelta, timezone
 

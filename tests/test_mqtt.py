@@ -77,9 +77,7 @@ class TestMqttClientConstruction(unittest.TestCase):
     """Tests for client_id and username construction, credential wiring."""
 
     def _make_client(self) -> MqttClient:
-        with (
-            patch("pymbrewclient.mqtt.client._paho.Client") as mock_paho_cls,
-        ):
+        with (patch("pymbrewclient.mqtt.client._paho.Client") as mock_paho_cls,):
             mock_paho = MagicMock()
             mock_paho_cls.return_value = mock_paho
             return MqttClient(api_token="test-token-xyz", user_uuid="user-uuid-abc")
@@ -187,18 +185,14 @@ class TestMqttBrokerConfiguration(unittest.TestCase):
             mock_cls.return_value = mock_paho
             client = MqttClient(api_token="t", user_uuid="u")
             client.connect()
-        mock_paho.connect.assert_called_once_with(
-            host=BROKER_HOST, port=BROKER_PORT, keepalive=KEEPALIVE
-        )
+        mock_paho.connect.assert_called_once_with(host=BROKER_HOST, port=BROKER_PORT, keepalive=KEEPALIVE)
 
     def test_reconnect_delay_is_five_seconds(self) -> None:
         with patch("pymbrewclient.mqtt.client._paho.Client") as mock_cls:
             mock_paho = MagicMock()
             mock_cls.return_value = mock_paho
             MqttClient(api_token="t", user_uuid="u")
-        mock_paho.reconnect_delay_set.assert_called_once_with(
-            min_delay=RECONNECT_DELAY, max_delay=RECONNECT_DELAY
-        )
+        mock_paho.reconnect_delay_set.assert_called_once_with(min_delay=RECONNECT_DELAY, max_delay=RECONNECT_DELAY)
 
 
 # ---------------------------------------------------------------------------
@@ -214,9 +208,7 @@ class TestLastWill(unittest.TestCase):
             client = MqttClient(api_token="t", user_uuid="u")
 
         expected_topic = f"apps/lastwill/{client._client_id}"
-        mock_paho.will_set.assert_called_once_with(
-            topic=expected_topic, payload="offline", qos=0, retain=False
-        )
+        mock_paho.will_set.assert_called_once_with(topic=expected_topic, payload="offline", qos=0, retain=False)
 
     def test_last_will_payload_is_offline(self) -> None:
         with patch("pymbrewclient.mqtt.client._paho.Client") as mock_cls:
@@ -658,10 +650,7 @@ class TestDecodeRawFields(unittest.TestCase):
         self.assertAlmostEqual(result, 3.14, places=4)
 
     def test_decode_repeated_field(self) -> None:
-        data = (
-            _encode_varint((2 << 3) | 0) + _encode_varint(10)
-            + _encode_varint((2 << 3) | 0) + _encode_varint(20)
-        )
+        data = _encode_varint((2 << 3) | 0) + _encode_varint(10) + _encode_varint((2 << 3) | 0) + _encode_varint(20)
         raw = decode_raw_fields(data)
         self.assertEqual(raw[2], [10, 20])
 
@@ -722,11 +711,11 @@ class TestBreweryClientCreateMqttClient(unittest.TestCase):
         from pymbrewclient.client import BreweryClient
         from pymbrewclient.rest.models import UserProfile
 
-        with patch("pymbrewclient.rest.client.RestApiClient._ensure_token"), patch(
-            "pymbrewclient.rest.client.RestApiClient.get_user_profile"
-        ) as mock_profile, patch(
-            "pymbrewclient.mqtt.client._paho.Client"
-        ) as mock_paho_cls:
+        with (
+            patch("pymbrewclient.rest.client.RestApiClient._ensure_token"),
+            patch("pymbrewclient.rest.client.RestApiClient.get_user_profile") as mock_profile,
+            patch("pymbrewclient.mqtt.client._paho.Client") as mock_paho_cls,
+        ):
             mock_paho = MagicMock()
             mock_paho_cls.return_value = mock_paho
             mock_profile.return_value = UserProfile(uuid="profile-uuid-xyz")
@@ -742,11 +731,11 @@ class TestBreweryClientCreateMqttClient(unittest.TestCase):
         from pymbrewclient.client import BreweryClient
         from pymbrewclient.rest.models import UserProfile
 
-        with patch("pymbrewclient.rest.client.RestApiClient._ensure_token"), patch(
-            "pymbrewclient.rest.client.RestApiClient.get_user_profile"
-        ) as mock_profile, patch(
-            "pymbrewclient.mqtt.client._paho.Client"
-        ) as mock_paho_cls:
+        with (
+            patch("pymbrewclient.rest.client.RestApiClient._ensure_token"),
+            patch("pymbrewclient.rest.client.RestApiClient.get_user_profile") as mock_profile,
+            patch("pymbrewclient.mqtt.client._paho.Client") as mock_paho_cls,
+        ):
             mock_paho = MagicMock()
             mock_paho_cls.return_value = mock_paho
             mock_profile.return_value = UserProfile(uuid="profile-uuid-xyz")
@@ -765,11 +754,11 @@ class TestBreweryClientCreateMqttClient(unittest.TestCase):
         from pymbrewclient.client import BreweryClient
         from pymbrewclient.rest.models import UserProfile
 
-        with patch("pymbrewclient.rest.client.RestApiClient._ensure_token"), patch(
-            "pymbrewclient.rest.client.RestApiClient.get_user_profile"
-        ) as mock_profile, patch(
-            "pymbrewclient.mqtt.client._paho.Client"
-        ) as mock_paho_cls:
+        with (
+            patch("pymbrewclient.rest.client.RestApiClient._ensure_token"),
+            patch("pymbrewclient.rest.client.RestApiClient.get_user_profile") as mock_profile,
+            patch("pymbrewclient.mqtt.client._paho.Client") as mock_paho_cls,
+        ):
             mock_paho = MagicMock()
             mock_paho_cls.return_value = mock_paho
             mock_profile.return_value = UserProfile(uuid="my-user-uuid-123")
@@ -785,11 +774,11 @@ class TestBreweryClientCreateMqttClient(unittest.TestCase):
         from pymbrewclient.client import BreweryClient
         from pymbrewclient.rest.models import UserProfile
 
-        with patch("pymbrewclient.rest.client.RestApiClient._ensure_token"), patch(
-            "pymbrewclient.rest.client.RestApiClient.get_user_profile"
-        ) as mock_profile, patch(
-            "pymbrewclient.mqtt.client._paho.Client"
-        ) as mock_paho_cls:
+        with (
+            patch("pymbrewclient.rest.client.RestApiClient._ensure_token"),
+            patch("pymbrewclient.rest.client.RestApiClient.get_user_profile") as mock_profile,
+            patch("pymbrewclient.mqtt.client._paho.Client") as mock_paho_cls,
+        ):
             mock_paho_cls.return_value = MagicMock()
             mock_profile.return_value = UserProfile(uuid="uid")
 
