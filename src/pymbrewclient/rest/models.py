@@ -266,6 +266,15 @@ class Session:
 
 
 @dataclass
+class UserProfile:
+    uuid: str
+    email: str | None = None
+    username: str | None = None
+    first_name: str | None = None
+    last_name: str | None = None
+
+
+@dataclass
 class TokenResponse:
     token: str
     exp: int

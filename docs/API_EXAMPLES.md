@@ -164,3 +164,111 @@ The response is organized into different categories based on device state:
 - `stage`: "Serving"
 - Contains beer information
 - Temperature maintained at serving temperature
+
+---
+
+## MQTT-over-WebSocket
+
+`pymbrewclient` supports real-time device telemetry over MQTT-over-WebSocket using
+`create_mqtt_client()`.  The underlying broker is `broker.minibrew.io:15675/ws` (TLS).
+
+> **Security warning:** The MiniBrew REST API token is used as the MQTT
+> password.  Do **not** log the `MqttClient` object, its `repr()`, or any
+> callback data in contexts where credentials could be exposed.
+
+### Connection example
+
+```python
+from pymbrewclient import BreweryClient
+
+client = BreweryClient(username="you@example.com", *****)
+
+with client.create_mqtt_client() as mqtt:
+    mqtt.on_connected(lambda: print("Connected"))
+    mqtt.on_disconnected(lambda: print("Disconnected"))
+    mqtt.on_reconnecting(lambda: print("Reconnecting..."))
+    mqtt.on_error(lambda err: print(f"Error: {err}"))
+
+    mqtt.subscribe_device_logs("7391Q4827-5NZC8R2M")
+
+    import time
+    time.sleep(30)
+```
+
+### Raw-message example
+
+```python
+from pymbrewclient.mqtt.models import MqttMessage
+
+with client.create_mqtt_client() as mqtt:
+    def handle(msg: MqttMessage) -> None:
+        print(msg.topic, msg.received_at, msg.payload.hex())
+
+    mqtt.on_message(handle)
+    mqtt.subscribe_device_logs("7391Q4827-5NZC8R2M")
+    import time; time.sleep(30)
+```
+
+### Decoded telemetry example
+
+```python
+from pymbrewclient.mqtt.models import DeviceLogMessage
+
+with client.create_mqtt_client() as mqtt:
+    def handle_log(msg: DeviceLogMessage) -> None:
+        if msg.decode_error:
+            print(f"Decode error: {msg.decode_error}")
+            return
+        print(f"Session {msg.session_id}")
+        print(f"Process state: {msg.process_state}")
+        print(f"Current temp: {msg.current_temperature}°C")
+        print(f"Target temp:  {msg.target_temperature}°C")
+
+    mqtt.on_device_log(handle_log)
+    mqtt.subscribe_device_logs("7391Q4827-5NZC8R2M")
+    import time; time.sleep(30)
+```
+
+### `next_action_at` example
+
+```python
+with client.create_mqtt_client() as mqtt:
+    def handle_log(msg: DeviceLogMessage) -> None:
+        if msg.next_action_at:
+            print(f"Next action at (UTC): {msg.next_action_at.isoformat()}")
+            # Home Assistant can display this UTC timestamp in the user's local timezone.
+
+    mqtt.on_device_log(handle_log)
+    mqtt.subscribe_device_logs("7391Q4827-5NZC8R2M")
+    import time; time.sleep(30)
+```
+
+`next_action_at` is calculated as:
+
+```python
+next_action_at = message_timestamp + timedelta(seconds=seconds_until_next_action)
+```
+
+It is always a timezone-aware UTC `datetime`.  No local timezone conversion is
+applied inside the library; downstream consumers (such as Home Assistant) should
+handle display timezone conversion.
+
+### Limitations: protobuf schema
+
+MiniBrew's official protobuf schema (`minibrew/minibrew-protobuf`) is a private
+repository that is not publicly accessible.  The field numbers used in
+`DeviceLogMessage` were **reconstructed** from:
+
+- The MiniBrew REST API response structure (`Device` dataclass field names)
+- The community-maintained `minibrew/enduser-docker-server` project documentation
+
+**Until official field numbers are confirmed, decoded telemetry values may be
+incorrect.**  The raw `payload` bytes are always preserved in `MqttMessage.payload`
+and `DeviceLogMessage.payload`.  To inspect a live message yourself:
+
+```bash
+protoc --decode_raw < captured_payload.bin
+```
+
+The raw field numbers are also exposed via `DeviceLogMessage.raw_fields` for
+inspection without any mapping.
