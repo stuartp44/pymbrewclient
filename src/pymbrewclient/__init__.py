@@ -36,6 +36,16 @@
 # Disclaimer: This software is an independent project and is not affiliated with, endorsed by, or associated with MiniBrew. MiniBrew's trademarks, logos, API, and other intellectual property are owned by MiniBrew and are not included in this software. Users are responsible for complying with MiniBrew's terms of service when using this software.
 from .client import BreweryClient, BreweryClientError, DeviceLookupError
 from .mqtt.client import MqttClient
+from .mqtt.enums import (
+    ActuatorType,
+    ErrorType,
+    MachineConnectionStatus,
+    MachineType,
+    ProcessPhase,
+    ProcessState,
+    ProcessType,
+    SensorType,
+)
 from .mqtt.models import DeviceLogMessage, MqttMessage
 from .rest.models import Device, TokenResponse, ApiResponse, BreweryOverview, Session, DeviceDetails, Beer, UserProfile
 
@@ -46,6 +56,14 @@ __all__ = [
     "MqttClient",
     "MqttMessage",
     "DeviceLogMessage",
+    "MachineType",
+    "MachineConnectionStatus",
+    "SensorType",
+    "ActuatorType",
+    "ProcessType",
+    "ProcessPhase",
+    "ProcessState",
+    "ErrorType",
     "Device",
     "TokenResponse",
     "ApiResponse",

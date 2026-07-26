@@ -213,6 +213,7 @@ with client.create_mqtt_client() as mqtt:
 
 ```python
 from pymbrewclient.mqtt.models import DeviceLogMessage
+from pymbrewclient.mqtt.enums import SensorType
 
 with client.create_mqtt_client() as mqtt:
     def handle_log(msg: DeviceLogMessage) -> None:
@@ -223,11 +224,12 @@ with client.create_mqtt_client() as mqtt:
         print(f"Process state: {msg.process_state}")
         print(f"Current temp: {msg.current_temperature}°C")
         print(f"Target temp:  {msg.target_temperature}°C")
-        print(f"Wi-Fi RSSI:  {msg.wifi_rssi_dbm} dBm")
+        print(f"Temp control power: {msg.temp_control_power}%")  # negative = cooling
+        print(f"Liquid temp: {msg.sensor(SensorType.TEMP_LIQUID)}°C")
         if msg.next_action_at:
             print(f"Next action: {msg.next_action_at.isoformat()}")
-        for measurement_id, value in msg.measurements.items():
-            print(f"Measurement {measurement_id}: {value}")
+        for sensor_type, value in msg.named_measurements.items():
+            print(f"{sensor_type.name}: {value}")
 
     mqtt.on_device_log(handle_log)
     mqtt.subscribe_device_logs("7391Q4827-5NZC8R2M")
@@ -242,10 +244,13 @@ repository that is not publicly accessible. The fields exposed directly on
 with the MiniBrew REST API response structure.
 
 Unknown nested state values are exposed through `DeviceLogMessage.state_fields`.
-Confirmed measurement ID 24 is also exposed as `DeviceLogMessage.wifi_rssi_dbm`;
-all readings, including measurements whose semantics remain unconfirmed, stay
-available by numeric ID in `DeviceLogMessage.measurements`. The raw `payload`
-bytes are always preserved in `MqttMessage.payload` and
+Repeated `measurements` are keyed by `SensorType` (see `pymbrewclient.mqtt.enums`);
+`DeviceLogMessage.sensor(SensorType.X)` and `DeviceLogMessage.named_measurements`
+provide typed access. Measurement ID 24 is `SensorType.TEMP_CONTROL_POWER`
+(signed Peltier power, negative = cooling), also exposed as
+`DeviceLogMessage.temp_control_power`. All readings, including any IDs not yet in
+`SensorType`, stay available by numeric ID in `DeviceLogMessage.measurements`.
+The raw `payload` bytes are always preserved in `MqttMessage.payload` and
 `DeviceLogMessage.payload`. To inspect a live message:
 
 ```bash
@@ -262,7 +267,7 @@ and 30, remain available without speculative semantic names.
 
 The CLI prints curated decoded telemetry by default, excluding the binary
 payload, numeric measurement map, and protobuf field maps. Confirmed named
-measurements such as `wifi_rssi_dbm` remain visible:
+measurements such as `temp_control_power` remain visible:
 
 ```bash
 pymbrewclient watch-device-logs \

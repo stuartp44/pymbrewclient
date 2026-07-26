@@ -13,6 +13,16 @@ from pymbrewclient.mqtt.client import (
     MqttClient,
     _extract_device_uuid,
 )
+from pymbrewclient.mqtt.enums import (
+    ActuatorType,
+    ErrorType,
+    MachineConnectionStatus,
+    MachineType,
+    ProcessPhase,
+    ProcessState,
+    ProcessType,
+    SensorType,
+)
 from pymbrewclient.mqtt.models import DeviceLogMessage, MqttMessage
 from pymbrewclient.mqtt.proto import decode_device_log, decode_raw_fields
 from requests.certs import where as requests_ca_bundle
@@ -556,9 +566,22 @@ class TestDeviceLogFixtureParsing(unittest.TestCase):
         for measurement_id, value in expected.items():
             self.assertAlmostEqual(decoded.measurements[measurement_id], value, places=2)
 
-    def test_decode_wifi_rssi(self) -> None:
+    def test_decode_temp_control_power(self) -> None:
         decoded = decode_device_log(_make_mqtt_message("devices/logs/test-dev", self.payload))
-        self.assertEqual(decoded.wifi_rssi_dbm, -45.0)
+        self.assertEqual(decoded.temp_control_power, -45.0)
+
+    def test_sensor_accessor_and_named_measurements(self) -> None:
+        decoded = decode_device_log(_make_mqtt_message("devices/logs/test-dev", self.payload))
+        # TEMP_LIQUID mirrors the reported current temperature.
+        self.assertEqual(decoded.sensor(SensorType.TEMP_LIQUID), 19.3)
+        self.assertEqual(decoded.sensor(SensorType.TEMP_LIQUID), decoded.current_temperature)
+        self.assertEqual(decoded.sensor(SensorType.TEMP_CONTROL_POWER), decoded.temp_control_power)
+        # named_measurements is keyed by SensorType and covers every known id here.
+        named = decoded.named_measurements
+        self.assertTrue(all(isinstance(key, SensorType) for key in named))
+        self.assertEqual(named[SensorType.TEMP_ENVIRONMENT], 27.3)
+        self.assertEqual(named[SensorType.PELTIER_FAN_POWER], 100.0)
+        self.assertEqual(set(named), {SensorType(mid) for mid in decoded.measurements})
 
     def test_raw_payload_is_preserved(self) -> None:
         msg = _make_mqtt_message("devices/logs/test-dev", self.payload)
@@ -608,7 +631,7 @@ class TestLiveDeviceLogEnvelopeParsing(unittest.TestCase):
         self.assertEqual(self.decoded.user_action, 0)
         self.assertEqual(self.decoded.current_temperature, 19.2)
         self.assertEqual(self.decoded.target_temperature, 19.0)
-        self.assertEqual(self.decoded.wifi_rssi_dbm, -36.0)
+        self.assertEqual(self.decoded.temp_control_power, -36.0)
         self.assertEqual(self.decoded.measurements[3], 19.2)
         self.assertEqual(self.decoded.measurements[24], -36.0)
 
@@ -713,6 +736,80 @@ class TestMalformedProtoHandling(unittest.TestCase):
 
         self.assertEqual(len(received), 1)
         self.assertIsNotNone(received[0].decode_error)
+
+
+# ---------------------------------------------------------------------------
+# Protobuf enum values
+# ---------------------------------------------------------------------------
+
+
+class TestProtobufEnums(unittest.TestCase):
+    """Enum values must match MiniBrew's protobuf source verbatim."""
+
+    def test_machine_type_values(self) -> None:
+        self.assertEqual(MachineType.BASE, 0)
+        self.assertEqual(MachineType.KEG, 1)
+
+    def test_machine_connection_status_values(self) -> None:
+        self.assertEqual(MachineConnectionStatus.OFFLINE, 0)
+        self.assertEqual(MachineConnectionStatus.ONLINE, 1)
+        self.assertEqual(MachineConnectionStatus.NOT_RESPONDING, 2)
+
+    def test_sensor_type_key_values(self) -> None:
+        self.assertEqual(SensorType.TEMP_LIQUID, 3)
+        self.assertEqual(SensorType.TEMP_CONTROL_POWER, 24)
+        self.assertEqual(SensorType.PELTIER_FAN_POWER, 26)
+        self.assertEqual(SensorType.GSENSOR_RSSI, 27)
+
+    def test_sensor_type_skips_reserved_ids(self) -> None:
+        reserved = {5, 8, 11}
+        present = {member.value for member in SensorType}
+        self.assertTrue(reserved.isdisjoint(present))
+
+    def test_actuator_type_values(self) -> None:
+        self.assertEqual(ActuatorType.UNUSED, 0)
+        self.assertEqual(ActuatorType.VALVE_TO_MASHING_TUN, 2)
+        self.assertEqual(ActuatorType.FAN_PCB, 5)
+
+    def test_process_type_values(self) -> None:
+        self.assertEqual(ProcessType.PROC_IDLE, 0)
+        self.assertEqual(ProcessType.PROC_BREWING, 1)
+        self.assertEqual(ProcessType.PROC_CLEAN_MINIBREW, 2)
+        self.assertEqual(ProcessType.PROC_CLEAN_KEG, 3)
+        self.assertEqual(ProcessType.PROC_ACID_CLEAN_MINIBREW, 6)
+        self.assertEqual(ProcessType.PROC_FERMENTATION, 4)
+        self.assertEqual(ProcessType.PROC_SERVING, 5)
+
+    def test_process_phase_values(self) -> None:
+        self.assertEqual(ProcessPhase.PHASE_NONE, 0)
+        self.assertEqual(ProcessPhase.BREW_PREPARING, 1)
+        self.assertEqual(ProcessPhase.FERM_PREPARING, 12)
+        self.assertEqual(ProcessPhase.FERM_PRIMARY, 5)
+        self.assertEqual(ProcessPhase.FERM_CARBONATING, 13)
+        self.assertEqual(ProcessPhase.ACID_CLEAN_MB_RINSING, 16)
+
+    def test_process_state_key_values(self) -> None:
+        self.assertEqual(ProcessState.IDLE_STATE, 0)
+        self.assertEqual(ProcessState.PUMP_PRIMING_STATE, 10)
+        self.assertEqual(ProcessState.FERMENTATION_TEMP_CONTROL_STATE, 80)
+        self.assertEqual(ProcessState.PREPARE_CIP_STATE, 101)
+        self.assertEqual(ProcessState.ACID_CLEAN_FLOW_RECOVERY_STATE, 126)
+
+    def test_error_type_key_values(self) -> None:
+        self.assertEqual(ErrorType.ERR_UNDEFINED, 0)
+        self.assertEqual(ErrorType.ERR_IO_COMMUNICATION_FAILED, 9)
+        self.assertEqual(ErrorType.ERR_IO_COMMUNICATION_ERROR, 116)
+        self.assertEqual(ErrorType.ERR_I0_LIQUID_PUMP_HIGH_CURRENT_WARNING, 120)
+
+    def test_enums_are_reexported_from_package_root(self) -> None:
+        import pymbrewclient
+
+        self.assertIs(pymbrewclient.SensorType, SensorType)
+        self.assertIs(pymbrewclient.MachineType, MachineType)
+        self.assertIs(pymbrewclient.ProcessType, ProcessType)
+        self.assertIs(pymbrewclient.ProcessPhase, ProcessPhase)
+        self.assertIs(pymbrewclient.ProcessState, ProcessState)
+        self.assertIs(pymbrewclient.ErrorType, ErrorType)
 
 
 # ---------------------------------------------------------------------------

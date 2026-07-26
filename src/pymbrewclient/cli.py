@@ -36,6 +36,7 @@
 # Disclaimer: This software is an independent project and is not affiliated with, endorsed by, or associated with MiniBrew. MiniBrew's trademarks, logos, API, and other intellectual property are owned by MiniBrew and are not included in this software. Users are responsible for complying with MiniBrew's terms of service when using this software.
 from dataclasses import asdict, is_dataclass
 from datetime import datetime
+from importlib.metadata import PackageNotFoundError, version as _pkg_version
 import json
 import logging
 import threading
@@ -47,6 +48,15 @@ from rich import print as rich_print
 from rich.pretty import Pretty
 
 from pymbrewclient.client import BreweryClient, BreweryClientError
+from pymbrewclient.mqtt.enums import (
+    MachineConnectionStatus,
+    MachineType,
+    ProcessPhase,
+    ProcessState,
+    ProcessType,
+    SensorType,
+    UserAction,
+)
 from pymbrewclient.mqtt.models import DeviceLogMessage
 from pymbrewclient.rest.client import RestApiClient
 from pymbrewclient.rest.models import Device, datetime_to_api_string, format_duration
@@ -103,6 +113,24 @@ def print_output(data: BaseModel | dict | list, format: str) -> None:
         rich_print(Pretty(serialized_data))
 
 
+def _enum_name(value: int | None, enum_cls: type) -> str | None:
+    """Return enum member name for *value* when it exists, else ``None``."""
+    if value is None:
+        return None
+    try:
+        return enum_cls(value).name
+    except (TypeError, ValueError):
+        return None
+
+
+def _sensor_value_or_none(msg: DeviceLogMessage, sensor_type: SensorType, *, hide_zero: bool = False) -> float | None:
+    """Return a sensor reading, optionally hiding zero values as unavailable."""
+    value = msg.sensor(sensor_type)
+    if hide_zero and value == 0.0:
+        return None
+    return value
+
+
 def curate_device_log_output(msg: DeviceLogMessage) -> dict[str, object]:
     """Return useful decoded telemetry without verbose protobuf internals."""
     curated = {
@@ -113,12 +141,23 @@ def curate_device_log_output(msg: DeviceLogMessage) -> dict[str, object]:
         "session_id": msg.session_id,
         "device_timestamp": msg.device_timestamp,
         "current_state": msg.current_state,
+        "current_state_name": _enum_name(msg.current_state, MachineConnectionStatus),
         "process_type": msg.process_type,
+        "process_type_name": _enum_name(msg.process_type, ProcessType),
         "process_state": msg.process_state,
+        "process_state_name": _enum_name(msg.process_state, ProcessState),
         "user_action": msg.user_action,
+        "user_action_name": _enum_name(msg.user_action, UserAction),
+        "process_phase": msg.process_phase,
+        "process_phase_name": _enum_name(msg.process_phase, ProcessPhase),
+        "machine_type": msg.machine_type,
+        "machine_type_name": _enum_name(msg.machine_type, MachineType),
         "current_temperature": msg.current_temperature,
         "target_temperature": msg.target_temperature,
-        "wifi_rssi_dbm": msg.wifi_rssi_dbm,
+        "temp_control_power": msg.temp_control_power,
+        "esp_core_temp": _sensor_value_or_none(msg, SensorType.ESP_CORE_TEMP, hide_zero=True),
+        "button": _sensor_value_or_none(msg, SensorType.BUTTON),
+        "fan_power": _sensor_value_or_none(msg, SensorType.PELTIER_FAN_POWER, hide_zero=True),
         "seconds_until_next_action": msg.seconds_until_next_action,
         "next_action_at": msg.next_action_at,
         "decode_error": msg.decode_error,
@@ -131,6 +170,16 @@ def setup_logging(level: str) -> None:
     logging.basicConfig(level=getattr(logging, level.upper(), logging.INFO), format="%(message)s", force=True)
 
 
+def _version_callback(value: bool) -> None:
+    if not value:
+        return
+    try:
+        typer.echo(_pkg_version("pymbrewclient"))
+    except PackageNotFoundError:
+        typer.echo("unknown (package not installed)")
+    raise typer.Exit()
+
+
 @app.callback()
 def configure(
     logging_level: Annotated[
@@ -141,6 +190,15 @@ def configure(
             case_sensitive=False,
         ),
     ] = "INFO",
+    version: Annotated[
+        bool,
+        typer.Option(
+            "--version",
+            help="Show the installed pymbrewclient version and exit.",
+            callback=_version_callback,
+            is_eager=True,
+        ),
+    ] = False,
 ) -> None:
     """
     CLI for reading information from the MiniBrew Pro Portal.

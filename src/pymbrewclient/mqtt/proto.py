@@ -65,6 +65,10 @@ Observed telemetry structure
     26         seconds_until_next_action       varint
     =========  ==============================  ============================
 
+Measurement entries (outer field 3) are keyed by ``SensorType`` (see
+``.enums``); e.g. ID 3 is ``TEMP_LIQUID`` and ID 24 is ``TEMP_CONTROL_POWER``
+(signed Peltier power, negative = cooling).
+
 The nested state message has observed fields 1 (current state), 2 (process
 type), 3 (process state), and 8 (user action). Unknown outer, state, and
 measurement fields remain available without speculative names.
@@ -77,6 +81,7 @@ Live broker messages wrap this telemetry message in an envelope with field 1
 import struct
 from datetime import datetime, timedelta, timezone
 
+from .enums import SensorType
 from .models import DeviceLogMessage, MqttMessage
 
 # ---------------------------------------------------------------------------
@@ -283,7 +288,9 @@ def decode_device_log(msg: MqttMessage) -> DeviceLogMessage:
     except ValueError as exc:
         base.decode_error = f"Measurement decode failed: {exc}"
 
-    base.wifi_rssi_dbm = base.measurements.get(24)
+    base.temp_control_power = base.measurements.get(SensorType.TEMP_CONTROL_POWER)
+    base.process_phase = _first_varint(telemetry, 21)
+    base.machine_type = _first_varint(telemetry, 22)
     base.current_temperature = _first_float32(telemetry, 19)
     base.target_temperature = _first_float32(telemetry, 18)
     base.seconds_until_next_action = _first_varint(telemetry, 26)

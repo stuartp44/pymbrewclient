@@ -516,10 +516,10 @@ class TestCli(unittest.TestCase):
             process_state=80,
             current_temperature=19.3,
             target_temperature=19.0,
-            wifi_rssi_dbm=-45.0,
+            temp_control_power=-45.0,
             seconds_until_next_action=851142,
             next_action_at=datetime(2026, 8, 4, 16, 37, 6, 734000, tzinfo=timezone.utc),
-            measurements={0: 27.3, 3: 19.3, 24: -45.0},
+            measurements={0: 27.3, 3: 19.3, 13: 122.0, 19: 0.0, 24: -45.0, 26: 100.0},
         )
 
         mock_mqtt = MagicMock()
@@ -573,11 +573,15 @@ class TestCli(unittest.TestCase):
         self.assertEqual(payload["sequence_number"], 24098)
         self.assertEqual(payload["session_id"], 80851)
         self.assertEqual(payload["current_state"], 1)
+        self.assertEqual(payload["current_state_name"], "ONLINE")
         self.assertEqual(payload["process_type"], 4)
         self.assertEqual(payload["process_state"], 80)
         self.assertEqual(payload["current_temperature"], 19.3)
         self.assertEqual(payload["target_temperature"], 19.0)
-        self.assertEqual(payload["wifi_rssi_dbm"], -45.0)
+        self.assertEqual(payload["temp_control_power"], -45.0)
+        self.assertEqual(payload["esp_core_temp"], 122.0)
+        self.assertEqual(payload["button"], 0.0)
+        self.assertEqual(payload["fan_power"], 100.0)
         self.assertEqual(payload["seconds_until_next_action"], 851142)
         self.assertEqual(payload["next_action_at"], "2026-08-04T16:37:06.734000Z")
         self.assertNotIn("measurements", payload)
