@@ -226,11 +226,25 @@ class Session:
         original_gravity: float,
         timestamp_original_gravity: float,
         is_brewpack: bool,
+        created: str | datetime | None = None,
+        updated: str | datetime | None = None,
+        **_: object,
     ) -> None:
         self.id = id
         self.profile = profile
-        self.beer = Beer(**beer)
-        self.device = DeviceDetails(**device)
+        beer_field_names = {field.name for field in fields(Beer)}
+        if isinstance(beer, dict):
+            filtered_beer = {key: value for key, value in beer.items() if key in beer_field_names}
+            self.beer = Beer(**filtered_beer) if filtered_beer else None
+        else:
+            self.beer = None
+
+        device_field_names = {field.name for field in fields(DeviceDetails)}
+        if isinstance(device, dict):
+            filtered_device = {key: value for key, value in device.items() if key in device_field_names}
+            self.device = DeviceDetails(**filtered_device) if filtered_device else None
+        else:
+            self.device = None
         self.status = status
         self.session_type = session_type
         self.pending_command_seq = pending_command_seq
@@ -242,6 +256,8 @@ class Session:
         self.original_gravity = original_gravity
         self.timestamp_original_gravity = timestamp_original_gravity
         self.is_brewpack = is_brewpack
+        self.created = parse_api_datetime(created) if isinstance(created, str) else created
+        self.updated = parse_api_datetime(updated) if isinstance(updated, str) else updated
 
     def __repr__(self) -> str:
         return (

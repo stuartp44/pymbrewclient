@@ -3,6 +3,7 @@ import json
 import logging
 import unittest
 from datetime import datetime, timezone
+from copy import deepcopy
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
@@ -11,7 +12,7 @@ from typer.testing import CliRunner
 from pymbrewclient.cli import app, curate_device_log_output
 from pymbrewclient.client import BreweryClient, BreweryClientError, DeviceLookupError
 from pymbrewclient.rest.client import RestApiClient
-from pymbrewclient.rest.models import Beer, BreweryOverview, Device, TokenResponse, UserProfile, format_duration
+from pymbrewclient.rest.models import Beer, BreweryOverview, Device, Session, TokenResponse, UserProfile, format_duration
 
 DEVICE_PAYLOAD = {
     "uuid": "device-uuid-1",
@@ -67,6 +68,30 @@ SESSION_PAYLOAD = {
 class TestRestApiClient(unittest.TestCase):
     def setUp(self) -> None:
         self.client = RestApiClient(base_url="https://api.example.com", username="test_user", password="test_password")
+
+    @patch("pymbrewclient.rest.client.requests.get")
+    @patch("pymbrewclient.rest.client.RestApiClient._ensure_token")
+    def test_get_session_info_ignores_unknown_fields(
+        self, mock_ensure_token: MagicMock, mock_get: MagicMock
+    ) -> None:
+        payload = deepcopy(SESSION_PAYLOAD)
+        payload["created"] = "2025-07-20T10:30:00Z"
+        payload["updated"] = "2025-07-20T11:45:00Z"
+        payload["unknown_top_level"] = "ignored"
+        payload["beer"]["unexpected_beer_field"] = "ignored"
+        payload["device"]["unexpected_device_field"] = "ignored"
+
+        mock_response = MagicMock()
+        mock_response.json.return_value = payload
+        mock_response.raise_for_status = MagicMock()
+        mock_get.return_value = mock_response
+
+        session_info = self.client.get_session_info(12345)
+
+        self.assertIsInstance(session_info, Session)
+        self.assertEqual(session_info.id, SESSION_PAYLOAD["id"])
+        self.assertEqual(session_info.beer.id, SESSION_PAYLOAD["beer"]["id"])
+        self.assertEqual(session_info.device.uuid, SESSION_PAYLOAD["device"]["uuid"])
 
     @patch("pymbrewclient.rest.client.requests.post")
     def test_get_token(self, mock_post: MagicMock) -> None:
@@ -340,6 +365,26 @@ class TestRestApiClient(unittest.TestCase):
         self.assertEqual(beer.name, "Mock Beer")
         self.assertEqual(beer.style_name, "Mock Style")
         self.assertIsNone(beer.image)
+
+    @patch("pymbrewclient.rest.client.requests.get")
+    @patch("pymbrewclient.rest.client.RestApiClient._ensure_token")
+    def test_get_session_info_allows_null_nested_payloads(
+        self, mock_ensure_token: MagicMock, mock_get: MagicMock
+    ) -> None:
+        payload = deepcopy(SESSION_PAYLOAD)
+        payload["beer"] = None
+        payload["device"] = None
+
+        mock_response = MagicMock()
+        mock_response.json.return_value = payload
+        mock_response.raise_for_status = MagicMock()
+        mock_get.return_value = mock_response
+
+        session_info = self.client.get_session_info(12345)
+
+        self.assertIsInstance(session_info, Session)
+        self.assertIsNone(session_info.beer)
+        self.assertIsNone(session_info.device)
 
     @patch("pymbrewclient.rest.client.requests.post")
     def test_get_token_error(self, mock_post: MagicMock) -> None:
