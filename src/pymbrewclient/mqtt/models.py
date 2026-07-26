@@ -41,6 +41,8 @@ Typed message models for the MiniBrew MQTT client.
 from dataclasses import dataclass, field
 from datetime import datetime
 
+from .enums import SensorType
+
 
 @dataclass
 class MqttMessage:
@@ -125,14 +127,30 @@ class DeviceLogMessage:
     See ``USER_ACTION_LABELS`` in the MiniBrew community docs.
     """
 
+    process_phase: int | None = None
+    """
+    Process-phase integer (telemetry field 21, observed).
+    Maps to ``ProcessPhase`` values (e.g. 5 -> ``FERM_PRIMARY``).
+    """
+
+    machine_type: int | None = None
+    """
+    Machine-type integer (telemetry field 22, observed).
+    Maps to ``MachineType`` values (0 = BASE, 1 = KEG).
+    """
+
     current_temperature: float | None = None
     """Current temperature in °C (telemetry field 19, observed)."""
 
     target_temperature: float | None = None
     """Target temperature in °C (telemetry field 18, observed)."""
 
-    wifi_rssi_dbm: float | None = None
-    """Wi-Fi received signal strength in dBm (measurement ID 24, confirmed)."""
+    temp_control_power: float | None = None
+    """
+    Temperature-control (Peltier) power as a signed percentage; negative values
+    mean cooling and positive values mean heating
+    (:attr:`SensorType.TEMP_CONTROL_POWER`, measurement ID 24).
+    """
 
     seconds_until_next_action: int | None = None
     """Seconds until the next required user action (telemetry field 26, observed)."""
@@ -172,6 +190,28 @@ class DeviceLogMessage:
     measurements: dict[int, float] = field(default_factory=dict)
     """
     Measurement ID to float value from repeated telemetry field 3 entries.
-    Confirmed IDs are also exposed as named fields; all readings remain here
-    so unknown measurements are preserved.
+    Keys correspond to :class:`SensorType` values (e.g. ``3`` is
+    ``SensorType.TEMP_LIQUID``). Use :meth:`sensor` or :attr:`named_measurements`
+    for typed access; all readings, including any IDs not present in
+    :class:`SensorType`, are preserved here by their raw integer key.
     """
+
+    def sensor(self, sensor_type: SensorType) -> float | None:
+        """Return the measurement for *sensor_type*, or ``None`` if absent.
+
+        :param sensor_type: The :class:`SensorType` channel to look up.
+        :returns: The float reading, or ``None`` when the sensor was not
+                  reported in this message.
+        """
+        return self.measurements.get(int(sensor_type))
+
+    @property
+    def named_measurements(self) -> dict[SensorType, float]:
+        """
+        Measurements keyed by :class:`SensorType`.
+
+        Only IDs recognised by :class:`SensorType` are included; unknown IDs
+        remain available in :attr:`measurements` by their raw integer key.
+        """
+        known = set(SensorType)
+        return {SensorType(mid): value for mid, value in self.measurements.items() if mid in known}

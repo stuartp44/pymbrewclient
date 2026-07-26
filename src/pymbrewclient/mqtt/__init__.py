@@ -35,10 +35,28 @@
 #
 # Disclaimer: This software is an independent project and is not affiliated with, endorsed by, or associated with MiniBrew. MiniBrew's trademarks, logos, API, and other intellectual property are owned by MiniBrew and are not included in this software. Users are responsible for complying with MiniBrew's terms of service when using this software.
 from .client import MqttClient
+from .enums import (
+    ActuatorType,
+    ErrorType,
+    MachineConnectionStatus,
+    MachineType,
+    ProcessPhase,
+    ProcessState,
+    ProcessType,
+    SensorType,
+)
 from .models import DeviceLogMessage, MqttMessage
 
 __all__ = [
     "MqttClient",
     "MqttMessage",
     "DeviceLogMessage",
+    "MachineType",
+    "MachineConnectionStatus",
+    "SensorType",
+    "ActuatorType",
+    "ProcessType",
+    "ProcessPhase",
+    "ProcessState",
+    "ErrorType",
 ]
