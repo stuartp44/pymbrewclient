@@ -124,6 +124,45 @@ print(remaining_seconds)
 - MiniBrew can return an estimate that is already in the past when a device is paused, needs user attention, has stopped reporting, or when the backend estimate has not refreshed yet.
 - This feature exposes the REST estimate only. It is not MiniBrew's live MQTT countdown.
 
+## MQTT Telemetry Requests
+
+Use `subscribe_device_logs()` to subscribe to a device and request frequent
+telemetry without opening the MiniBrew portal:
+
+```python
+from pymbrewclient import BreweryClient
+
+client = BreweryClient(username, password)
+with client.create_mqtt_client() as mqtt:
+    mqtt.on_device_log(lambda message: print(message.current_temperature))
+    mqtt.on_error(lambda error: print(f"MQTT error: {error}"))
+    mqtt.subscribe_device_logs("your-device-serial")
+    input("Press Enter to disconnect\n")
+```
+
+The helper subscribes to `devices/logs/<serial>` and
+`devices/logrequests/<serial>`, then publishes MiniBrew's protobuf start-log
+request to `apps/logrequests/<serial>`. The requester is this client's plain
+UUID; requests use QoS 0 and are not retained.
+
+- A background watchdog re-requests logs after at least five seconds without
+  incoming telemetry, checking once per second. Unchanged packets still count
+  as activity; request responses do not.
+- While packets continue arriving, no periodic application request is sent.
+  The normal 60-second MQTT keepalive remains unchanged.
+- Subscriptions and start-log requests are restored after broker reconnects.
+- `unsubscribe_device_logs()` stops this client's log request and removes both
+  device topics. `disconnect()` stops the watchdog and sends stop-log requests
+  while connected, retaining subscriptions for a later reconnect.
+- `on_message()` exposes raw log-request responses. Publish failures are logged
+  and delivered to `on_error()`.
+- Generic `subscribe()` remains subscription-only. Use it if you do not want
+  the automatic frequent-log requests and recovery behaviour.
+
+The protocol was verified against portal traffic: a start request was followed
+by telemetry at about one packet per second, and the portal repeated the
+request after five seconds without logs. This does not guarantee telemetry
+from an offline device or establish that a request caused recovery.
 
 ## Development
 
