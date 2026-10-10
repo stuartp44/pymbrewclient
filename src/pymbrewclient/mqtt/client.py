@@ -47,6 +47,7 @@ and callback arguments.
 
 import logging
 import threading
+import time
 import uuid
 from collections.abc import Callable
 from datetime import datetime, timezone
@@ -70,8 +71,12 @@ BROKER_PORT: int = 15675
 WS_PATH: str = "/ws"
 KEEPALIVE: int = 60
 RECONNECT_DELAY: int = 5
+_LOG_REQUEST_TIMEOUT = 5
+_LOG_CHECK_INTERVAL = 1
 
 _DEVICE_LOG_TOPIC_PREFIX = "devices/logs/"
+_LOG_REQUEST_TOPIC_PREFIX = "apps/logrequests/"
+_LOG_RESPONSE_TOPIC_PREFIX = "devices/logrequests/"
 _DEVICE_TOPIC_PREFIX_PARTS = ("devices",)
 
 
@@ -137,7 +142,10 @@ class MqttClient:
         self._username = f"breweryportal-{self._user_uuid}"
 
         self._subscriptions: set[str] = set()
-        self._subscription_lock = threading.Lock()
+        self._subscription_lock = threading.RLock()
+        self._log_request_deadlines: dict[str, float] = {}
+        self._log_watchdog_stop = threading.Event()
+        self._log_watchdog_thread: threading.Thread | None = None
 
         self._connected = False
         self._ever_connected = False
@@ -205,17 +213,22 @@ class MqttClient:
             return
 
         logger.debug("MQTT connected (session_present=%s)", connect_flags.session_present)
-        self._connected = True
-        self._ever_connected = True
-
-        # Resubscribe to all topics (handles reconnect + clean_session=True)
+        errors = []
         with self._subscription_lock:
-            topics = list(self._subscriptions)
-        for topic in topics:
-            logger.debug("MQTT resubscribing to %s", topic)
-            client.subscribe(topic)
+            self._connected = True
+            self._ever_connected = True
+            for topic in self._subscriptions:
+                logger.debug("MQTT resubscribing to %s", topic)
+                client.subscribe(topic)
+            for device_uuid in self._log_request_deadlines:
+                error = self._publish_log_request(device_uuid, start=True)
+                if error is not None:
+                    errors.append(error)
 
-        self._fire_connected()
+        for error in errors:
+            self._fire_error(error)
+        if self._connected:
+            self._fire_connected()
 
     def _on_paho_disconnect(
         self,
@@ -226,7 +239,8 @@ class MqttClient:
         properties: Any,  # noqa: ANN401
     ) -> None:
         """Called when paho loses the connection."""
-        self._connected = False
+        with self._subscription_lock:
+            self._connected = False
         logger.debug("MQTT disconnected: %s", reason_code)
         self._fire_disconnected()
 
@@ -234,6 +248,10 @@ class MqttClient:
         """Called for every incoming MQTT PUBLISH."""
         received_at = datetime.now(tz=timezone.utc)
         device_uuid = _extract_device_uuid(msg.topic)
+        if msg.topic.startswith(_DEVICE_LOG_TOPIC_PREFIX) and device_uuid is not None:
+            with self._subscription_lock:
+                if device_uuid in self._log_request_deadlines:
+                    self._log_request_deadlines[device_uuid] = time.monotonic() + _LOG_REQUEST_TIMEOUT
 
         raw_msg = MqttMessage(
             topic=msg.topic,
@@ -297,6 +315,46 @@ class MqttClient:
                 logger.debug("Exception in on_device_log callback: %s", exc)
 
     # ------------------------------------------------------------------
+    # Application-level telemetry requests
+    # ------------------------------------------------------------------
+
+    def _publish_log_request(self, device_uuid: str, *, start: bool) -> ConnectionError | None:
+        """Queue the observed portal protobuf request while holding the subscription lock."""
+        # LogRequest field 2 is named device_id but contains the plain requester
+        # UUID. Fields 3 and 5 must be present even when their bool value is false.
+        payload = b"\x12\x24" + self._client_uuid.encode("ascii") + bytes((0x18, int(start), 0x28, 0))
+        if start:
+            self._log_request_deadlines[device_uuid] = time.monotonic() + _LOG_REQUEST_TIMEOUT
+        info = self._paho_client.publish(
+            f"{_LOG_REQUEST_TOPIC_PREFIX}{device_uuid}", payload=payload, qos=0, retain=False
+        )
+        if info.rc != _paho.MQTT_ERR_SUCCESS:
+            error = ConnectionError(f"MQTT log request failed for {device_uuid}: {_paho.error_string(info.rc)}")
+            logger.warning("%s", error)
+            return error
+        logger.debug("MQTT %s logs for %s", "requesting" if start else "stopping", device_uuid)
+        return None
+
+    def _retry_stale_device_logs(self, stop: threading.Event | None = None) -> None:
+        """Re-request each managed device whose incoming packets have stopped."""
+        errors = []
+        with self._subscription_lock:
+            if not self._connected or (stop is not None and stop.is_set()):
+                return
+            now = time.monotonic()
+            for device_uuid, deadline in self._log_request_deadlines.items():
+                if now >= deadline:
+                    error = self._publish_log_request(device_uuid, start=True)
+                    if error is not None:
+                        errors.append(error)
+        for error in errors:
+            self._fire_error(error)
+
+    def _watch_device_logs(self, stop: threading.Event) -> None:
+        while not stop.wait(_LOG_CHECK_INTERVAL):
+            self._retry_stale_device_logs(stop)
+
+    # ------------------------------------------------------------------
     # Public connection API
     # ------------------------------------------------------------------
 
@@ -309,6 +367,16 @@ class MqttClient:
         """
         logger.debug("MQTT connecting to %s:%d%s", BROKER_HOST, BROKER_PORT, WS_PATH)
         self._paho_client.connect(host=BROKER_HOST, port=BROKER_PORT, keepalive=KEEPALIVE)
+        with self._subscription_lock:
+            if self._log_watchdog_thread is None:
+                self._log_watchdog_stop = threading.Event()
+                self._log_watchdog_thread = threading.Thread(
+                    target=self._watch_device_logs,
+                    args=(self._log_watchdog_stop,),
+                    name="minibrew-log-watchdog",
+                    daemon=True,
+                )
+                self._log_watchdog_thread.start()
         self._paho_client.loop_start()
 
     def disconnect(self) -> None:
@@ -317,9 +385,23 @@ class MqttClient:
         Safe to call even when not connected.
         """
         logger.debug("MQTT disconnecting")
+        errors = []
+        with self._subscription_lock:
+            self._log_watchdog_stop.set()
+            thread = self._log_watchdog_thread
+            self._log_watchdog_thread = None
+            if self._connected:
+                for device_uuid in self._log_request_deadlines:
+                    error = self._publish_log_request(device_uuid, start=False)
+                    if error is not None:
+                        errors.append(error)
+            self._connected = False
+        if thread is not None and thread is not threading.current_thread():
+            thread.join()
         self._paho_client.disconnect()
         self._paho_client.loop_stop()
-        self._connected = False
+        for error in errors:
+            self._fire_error(error)
 
     # ------------------------------------------------------------------
     # Subscription API
@@ -337,8 +419,8 @@ class MqttClient:
         """
         with self._subscription_lock:
             self._subscriptions.add(topic)
-        if self._connected:
-            self._paho_client.subscribe(topic, qos=qos)
+            if self._connected:
+                self._paho_client.subscribe(topic, qos=qos)
         logger.debug("MQTT subscribed to %s (qos=%d)", topic, qos)
 
     def unsubscribe(self, topic: str) -> None:
@@ -349,10 +431,25 @@ class MqttClient:
         :param topic: Full MQTT topic string, as previously passed to
             :meth:`subscribe`.
         """
+        error = None
         with self._subscription_lock:
+            device_uuid = _extract_device_uuid(topic)
+            if (
+                topic.startswith(_DEVICE_LOG_TOPIC_PREFIX)
+                and device_uuid is not None
+                and device_uuid in self._log_request_deadlines
+            ):
+                del self._log_request_deadlines[device_uuid]
+                response_topic = f"{_LOG_RESPONSE_TOPIC_PREFIX}{device_uuid}"
+                self._subscriptions.discard(response_topic)
+                if self._connected:
+                    error = self._publish_log_request(device_uuid, start=False)
+                    self._paho_client.unsubscribe(response_topic)
             self._subscriptions.discard(topic)
-        if self._connected:
-            self._paho_client.unsubscribe(topic)
+            if self._connected:
+                self._paho_client.unsubscribe(topic)
+        if error is not None:
+            self._fire_error(error)
         logger.debug("MQTT unsubscribed from %s", topic)
 
     @staticmethod
@@ -368,14 +465,28 @@ class MqttClient:
 
         Incoming messages are delivered as :class:`~pymbrewclient.mqtt.models.DeviceLogMessage`
         instances to callbacks registered with :meth:`on_device_log`.
+        Starts frequent logs and re-requests them after five seconds without
+        incoming telemetry. Requests and subscriptions are restored on reconnect.
+        Log-request responses are available through :meth:`on_message`.
 
         :param device_uuid: Device serial number or UUID (e.g. ``"7391Q4827-5NZC8R2M"``).
         :param qos: Quality of Service level (0 or 1).
         """
-        self.subscribe(self.device_log_topic(device_uuid), qos=qos)
+        if not device_uuid or any(char in device_uuid for char in "/+#"):
+            raise ValueError("Device log requests require a non-empty device serial or UUID without MQTT wildcards.")
+        error = None
+        with self._subscription_lock:
+            self.subscribe(f"{_LOG_RESPONSE_TOPIC_PREFIX}{device_uuid}")
+            self.subscribe(self.device_log_topic(device_uuid), qos=qos)
+            if device_uuid not in self._log_request_deadlines:
+                self._log_request_deadlines[device_uuid] = time.monotonic() + _LOG_REQUEST_TIMEOUT
+                if self._connected:
+                    error = self._publish_log_request(device_uuid, start=True)
+        if error is not None:
+            self._fire_error(error)
 
     def unsubscribe_device_logs(self, device_uuid: str) -> None:
-        """Unsubscribe from device log telemetry for a specific device.
+        """Stop this client's frequent-log request and unsubscribe its device topics.
 
         :param device_uuid: Device serial number or UUID.
         """

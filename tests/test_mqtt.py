@@ -203,6 +203,7 @@ class TestMqttBrokerConfiguration(unittest.TestCase):
             mock_paho = MagicMock()
             mock_cls.return_value = mock_paho
             client = MqttClient(api_token="t", user_uuid="u")
+            self.addCleanup(client.disconnect)
             client.connect()
         mock_paho.connect.assert_called_once_with(host=BROKER_HOST, port=BROKER_PORT, keepalive=KEEPALIVE)
 
@@ -337,6 +338,7 @@ class TestConnectionLifecycle(unittest.TestCase):
             mock_paho = MagicMock()
             mock_cls.return_value = mock_paho
             client = MqttClient(api_token="t", user_uuid="u")
+        self.addCleanup(client.disconnect)
         return client, mock_paho
 
     def test_connect_calls_loop_start(self) -> None:
